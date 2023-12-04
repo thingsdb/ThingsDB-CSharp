@@ -33,19 +33,19 @@ namespace ThingsDB
         private int size;  // size actually written in data; if less than length the package is not complete
         private byte[] data;
 
-        public Package(byte[] header)
+        public Package(byte[] header, int offset)
         {
             try
             {
-                Tp = (Type)header[0];
+                Tp = (Type)header[offset];
             }
             catch (Exception)
             {
                 throw new UnknownType();
             }
-            CheckBit = (byte)header[1];
-            Pid = (ushort)header[2];
-            Length = (uint)header[4];
+            CheckBit = (byte)header[offset+1];
+            Pid = (ushort)header[offset+2];
+            Length = (uint)header[offset+4];
 
             if ((byte)Tp != ~CheckBit)
             {
@@ -70,14 +70,20 @@ namespace ThingsDB
             this.data = data;
         }
 
-        public void CopyData(byte[] data, int offset, int length)
+        public int CopyData(byte[] data, int offset, int length)
         {
             if (size + length > Length)
             {
-                throw new SizeMismatch();
+                length = (int)Length - size;
             }
             Array.Copy(data, offset, this.data, size, length);
             size += length;
+            return length;
+        }
+
+        public bool IsComplete()
+        {
+            return size == Length;
         }
     }
 }

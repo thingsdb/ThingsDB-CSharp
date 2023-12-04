@@ -87,17 +87,32 @@ namespace ThingsDB
                 {
                     client.Close();
                     stream = null;
+                    continue;
                 }
-                else if (package == null)
+                n += offset;
+                offset = 0;
+
+                while (offset < n)
                 {
-                    if (n < headerSize)
+                    if (package == null)
                     {
-                        offset = n;
+                        if (n-offset < headerSize)
+                        {
+                            offset = n;
+                            break;
+                        }
+                        package = new(buffer, offset);
+                        offset += headerSize;
                         continue;
                     }
-                    package = new(buffer);
-                    package.CopyData(buffer[headerSize: n - headerSize]);
+
+                    offset += package.CopyData(buffer, offset, n-offset);
+                    if (package.IsComplete())
+                    {
+                        package = null;
+                    }
                 }
+
             }
         }
 
