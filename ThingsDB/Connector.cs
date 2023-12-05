@@ -1,6 +1,5 @@
 ﻿using System.Net.Security;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 
 namespace ThingsDB
 {
@@ -9,13 +8,15 @@ namespace ThingsDB
         private readonly string host;
         private readonly int port;
         private readonly string defaultScope;
-        private string? username;
-        private string? password;
+        private string[]? auth;
         private string? token;
         private bool autoReconnect;
         private bool closed;
         private Stream? stream;
         private readonly TcpClient client = new();
+        private readonly Dictionary<int, TaskCompletionSource<Package>> lookup = new();
+        private ushort next_pid;
+        private StreamWriter? logStream;
 
         public Connector(string host) : this(host, 9000, "/thingsdb") { }
         public Connector(string host, int port) : this(host, port, "/thingsdb") { }
@@ -25,12 +26,12 @@ namespace ThingsDB
             this.host = host;
             this.port = port;
             token = null;
-            username = null;
-            password = null;
+            auth = null;
             this.defaultScope = defaultScope;
             stream = null;
             closed = false;
             autoReconnect = true;
+            next_pid = 0;
             _ = ListenAsync();
         }
 
@@ -41,6 +42,9 @@ namespace ThingsDB
 
         public bool IsAutoReconnect() { return autoReconnect; }
 
+        public void SetLogStream(StreamWriter? logStream) { 
+            this.logStream = logStream; 
+        }
 
 
         public async Task Connect(string token)
@@ -50,26 +54,19 @@ namespace ThingsDB
                 throw new ArgumentNullException(nameof(token));
             }
             this.token = token;
-
-
         }
 
-        private async Task ConnectAttempt()
+        public async Task Connect(string username, string password)
         {
-            Package pkg;
-            if (stream == null)
+            if (username == null)
             {
-                await client.ConnectAsync(host, port);
-                stream = new SslStream(client.GetStream());
+                throw new ArgumentNullException(nameof(username));
             }
-
-            if (token != null)
+            if (password == null)
             {
-                byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
-
-                pkg = new(Package.Type.ReqAuth, data);
+                throw new ArgumentNullException(nameof(password));
             }
-
+            auth = new string[2] { username, password };
         }
 
         public void Close()
@@ -82,11 +79,56 @@ namespace ThingsDB
             }
         }
 
-        private async Task Write(byte[] data)
+        private ushort GetNextPid()
         {
-            if (stream != null)
+            ushort pid = next_pid;
+            next_pid++;
+            return pid;
+        }
+
+        private async Task ConnectAttempt()
+        {
+            Package pkg;
+
+            if (stream == null)
             {
-                stream.Write(data, 0, data.Length);
+                await client.ConnectAsync(host, port);
+                stream = new SslStream(client.GetStream());
+            }
+
+            if (token != null)
+            {
+                byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
+                pkg = new(Package.Type.ReqAuth, GetNextPid(), data);
+            }
+            else
+            {
+                byte[] data = MessagePack.MessagePackSerializer.Serialize(auth);
+                pkg = new(Package.Type.ReqAuth, GetNextPid(), data);
+            }
+        }
+
+        private async Task<Package> Write(Package pkg)
+        {
+            Package result;
+            var promise = new TaskCompletionSource<Package>();
+            lookup[pkg.Pid()] = promise;
+
+            try
+            {
+                if (stream != null)
+                {
+                    stream.Write(pkg.Header(), 0, Package.HeaderSize);
+                    stream.Write(pkg.Data(), 0, pkg.Length());
+                    stream.Flush();
+                }
+
+                result = await promise.Task;
+                return result;
+            }
+            finally
+            {
+                lookup.Remove(pkg.Pid());
             }
         }
 
@@ -97,10 +139,9 @@ namespace ThingsDB
 
         private async Task ListenAsync()
         {
-            int headerSize = Marshal.SizeOf<Package.Header>();
             var buffer = new byte[512];
             int offset = 0;
-            Package package = null;
+            Package? package = null;
 
             while (true)
             {
@@ -124,19 +165,28 @@ namespace ThingsDB
                 {
                     if (package == null)
                     {
-                        if (n - offset < headerSize)
+                        if (n - offset < Package.HeaderSize)
                         {
                             offset = n;
                             break;
                         }
                         package = new(buffer, offset);
-                        offset += headerSize;
+                        offset += Package.HeaderSize;
                         continue;
                     }
 
                     offset += package.CopyData(buffer, offset, n - offset);
                     if (package.IsComplete())
                     {
+                        var promise = lookup[package.Pid()];
+                        if (promise != null)
+                        {
+                            promise.SetResult(package);
+                        }
+                        else if (logStream != null)
+                        {
+                            logStream.WriteLine(string.Format("No promise found for PID {0}", package.Pid()));
+                        }
                         package = null;
                     }
                 }

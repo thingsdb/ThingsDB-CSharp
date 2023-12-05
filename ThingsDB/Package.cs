@@ -1,18 +1,7 @@
-﻿using System.Runtime.InteropServices;
-
-namespace ThingsDB
+﻿namespace ThingsDB
 {
     internal class Package
     {
-        [StructLayout(LayoutKind.Sequential, Pack = 1)]
-        public struct Header
-        {
-            readonly byte tp;
-            readonly byte checkBit;
-            readonly ushort pid;
-            readonly uint length;
-        }
-
         public enum Type : byte
         {
             NodeStatus = 0, // {id: x, status:...}
@@ -39,6 +28,8 @@ namespace ThingsDB
             ReqEmit = 40,   // [scope, room_id, event, ...args]
         }
 
+        static public readonly int HeaderSize = 8;
+
         public class PackageException : Exception { }
         public class UnknownType : PackageException { }
         public class InvalidCheckBit : PackageException { }
@@ -62,10 +53,23 @@ namespace ThingsDB
             {
                 throw new UnknownType();
             }
-            tp = (byte)header[offset];
-            checkBit = (byte)header[offset + 1];
-            pid = (ushort)header[offset + 2];
-            length = (uint)header[offset + 4];
+
+            tp = header[offset];
+            checkBit = header[offset + 1];
+
+            if (BitConverter.IsLittleEndian)
+            {
+                pid = header[offset + 2];
+                length = header[offset + 4];
+            }
+            else
+            {
+                byte[] tmp = new byte[6];
+                Array.Copy(header, offset + 2, tmp, 0, 6);
+                Array.Reverse(tmp);
+                pid = tmp[4];
+                length = pid = tmp[0];
+            }
 
             if (tp != ~checkBit)
             {
@@ -100,8 +104,40 @@ namespace ThingsDB
             return size == length;
         }
 
-        public ushort Pid() { return pid; }
         public Type Tp() { return (Type)tp; }
-        public uint Length() { return length; }
+        public int Pid() { return pid; }
+        public int Length() { return (int)length; }
+
+        public byte[] Data() { return data; }
+
+        public byte[] Header()
+        {
+            byte[] data = new byte[HeaderSize];
+            data[0] = (byte)tp;
+            data[1] = (byte)checkBit;
+            Pack(data, 2, pid);
+            Pack(data, 4, length);
+            return data;
+        }
+
+        static private void Pack(byte[] destination, int offset, ushort value)
+        {
+            byte[] bytes = BitConverter.GetBytes(value);
+            if (!BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(bytes);
+            }
+            Array.Copy(bytes, 0, destination, offset, bytes.Length);
+        }
+
+        static private void Pack(byte[] destination, int offset, uint value)
+        {
+            byte[] bytes = BitConverter.GetBytes(value);
+            if (!BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(bytes);
+            }
+            Array.Copy(bytes, 0, destination, offset, bytes.Length);
+        }
     }
 }
