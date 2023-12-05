@@ -15,9 +15,28 @@ namespace ThingsDB
 
         public enum Type : byte
         {
-            one = 0x0,
-            two = 0x1,
-            three = 0x2,
+            NodeStatus = 0, // {id: x, status:...}
+
+            Warn = 5,       // {warn_msg:..., warn_code: x}
+
+            RoomJoin = 6,   // {id: x}
+            RoomLeave = 7,  // {id: x}
+            RoomEmit = 8,   // {id: x, event: ..., args:[...]}
+            RoomDelete = 9, // {id: x}
+
+            ResPong = 16,   // Empty
+            ResAuth = 17,   // Empty
+            ResData = 18,   // ...
+            ResError = 19,  // {error_msg: ..., error_code: x}
+
+            ReqPing = 32,   // Empty
+            ReqAuth = 33,   // [user, pass] or token            
+            ReqQuery = 34,  // [scope, code, {variable}]
+
+            ReqRun = 37,    // [scope, procedure, [[args]/{kw}]
+            ReqJoin = 38,   // [scope, ...room ids]
+            ReqLeave = 39,  // [scope, ...room ids]
+            ReqEmit = 40,   // [scope, room_id, event, ...args]
         }
 
         public class PackageException : Exception { }
@@ -25,56 +44,51 @@ namespace ThingsDB
         public class InvalidCheckBit : PackageException { }
         public class SizeMismatch : PackageException { }
 
-        public readonly Type Tp;
-        public readonly byte CheckBit;
-        public readonly ushort Pid;
-        public readonly uint Length;
+        private readonly byte tp;
+        private readonly byte checkBit;
+        private readonly ushort pid;
+        private readonly uint length;
 
+        private readonly byte[] data;
         private int size;  // size actually written in data; if less than length the package is not complete
-        private byte[] data;
 
         public Package(byte[] header, int offset)
         {
             try
             {
-                Tp = (Type)header[offset];
+                _ = (Type)header[offset];
             }
             catch (Exception)
             {
                 throw new UnknownType();
             }
-            CheckBit = (byte)header[offset+1];
-            Pid = (ushort)header[offset+2];
-            Length = (uint)header[offset+4];
+            tp = (byte)header[offset];
+            checkBit = (byte)header[offset + 1];
+            pid = (ushort)header[offset + 2];
+            length = (uint)header[offset + 4];
 
-            if ((byte)Tp != ~CheckBit)
+            if (tp != ~checkBit)
             {
                 throw new InvalidCheckBit();
             }
             size = 0;
-            data = new byte[Length];
+            data = new byte[length];
         }
 
-        public Package(Type tp, byte[] data)
+        public Package(Type tp, ushort pid, byte[] data)
         {
-
-        }
-
-        public void SetData(byte[] data)
-        {
-            if (data.Length != Length)
-            {
-                throw new SizeMismatch();
-            }
-            size = data.Length;
+            this.tp = (byte)tp;
+            checkBit = (byte)~this.tp;
+            this.pid = pid;
+            length = (uint)data.Length;
             this.data = data;
         }
 
         public int CopyData(byte[] data, int offset, int length)
         {
-            if (size + length > Length)
+            if (size + length > length)
             {
-                length = (int)Length - size;
+                length = (int)length - size;
             }
             Array.Copy(data, offset, this.data, size, length);
             size += length;
@@ -83,7 +97,11 @@ namespace ThingsDB
 
         public bool IsComplete()
         {
-            return size == Length;
+            return size == length;
         }
+
+        public ushort Pid() { return pid; }
+        public Type Tp() { return (Type)tp; }
+        public uint Length() { return length; }
     }
 }

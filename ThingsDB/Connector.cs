@@ -8,40 +8,68 @@ namespace ThingsDB
     {
         private readonly string host;
         private readonly int port;
-        private readonly string username;
-        private readonly string password;
         private readonly string defaultScope;
+        private string? username;
+        private string? password;
+        private string? token;
         private bool autoReconnect;
         private bool closed;
         private Stream? stream;
         private readonly TcpClient client = new();
 
-        public Connector(string host, string username, string password) : this(host, 9000, username, password, "/thingsdb") { }
-        public Connector(string host, int port, string username, string password) : this(host, port, username, password, "/thingsdb") { }
-        public Connector(string host, string username, string password, string defaultScope) : this(host, 9000, username, password, defaultScope) { }
-        public Connector(string host, int port, string username, string password, string defaultScope)
+        public Connector(string host) : this(host, 9000, "/thingsdb") { }
+        public Connector(string host, int port) : this(host, port, "/thingsdb") { }
+        public Connector(string host, string defaultScope) : this(host, 9000, defaultScope) { }
+        public Connector(string host, int port, string defaultScope)
         {
             this.host = host;
             this.port = port;
-            this.username = username;
-            this.password = password;
+            token = null;
+            username = null;
+            password = null;
             this.defaultScope = defaultScope;
             stream = null;
             closed = false;
-            autoReconnect = false;
+            autoReconnect = true;
             _ = ListenAsync();
         }
 
-        public async Task Connect(bool autoReconnect)
+        public void SetAutoReconnect(bool autoReconnect)
         {
             this.autoReconnect = autoReconnect;
+        }
 
+        public bool IsAutoReconnect() { return autoReconnect; }
+
+
+
+        public async Task Connect(string token)
+        {
+            if (token == null)
+            {
+                throw new ArgumentNullException(nameof(token));
+            }
+            this.token = token;
+
+
+        }
+
+        private async Task ConnectAttempt()
+        {
+            Package pkg;
             if (stream == null)
             {
                 await client.ConnectAsync(host, port);
                 stream = new SslStream(client.GetStream());
-
             }
+
+            if (token != null)
+            {
+                byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
+
+                pkg = new(Package.Type.ReqAuth, data);
+            }
+
         }
 
         public void Close()
@@ -96,7 +124,7 @@ namespace ThingsDB
                 {
                     if (package == null)
                     {
-                        if (n-offset < headerSize)
+                        if (n - offset < headerSize)
                         {
                             offset = n;
                             break;
@@ -106,7 +134,7 @@ namespace ThingsDB
                         continue;
                     }
 
-                    offset += package.CopyData(buffer, offset, n-offset);
+                    offset += package.CopyData(buffer, offset, n - offset);
                     if (package.IsComplete())
                     {
                         package = null;
