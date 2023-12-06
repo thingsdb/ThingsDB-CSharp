@@ -10,7 +10,7 @@ namespace Tests
         private Connector? thingsdb;
 
         [SetUp]
-        public void Setup()
+        public void SetUp()
         {
             thingsdb = new("playground.thingsdb.net", 9400, "//Doc", true);
         }
@@ -22,6 +22,27 @@ namespace Tests
             await thingsdb.Connect(token);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Connect and authenticate success");
+        }
+
+        [Test]
+        public async Task TestQuery()
+        {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            await thingsdb.Connect(token);
+            var data = await thingsdb.Query("1 + 2;");
+            //Assert.IsNotNull(data);
+
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            Assert.Pass("Query success");
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (thingsdb != null)
+            {
+                thingsdb.Close();
+            }
         }
     }
 }

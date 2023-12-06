@@ -2,6 +2,7 @@
 using System.Net.Security;
 using System.Net.Sockets;
 using System;
+using System.Net;
 
 namespace ThingsDB
 {
@@ -39,7 +40,8 @@ namespace ThingsDB
             stream = null;
             closed = false;            
             autoReconnect = true;
-            next_pid = 0;            
+            next_pid = 0;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
         public void SetAutoReconnect(bool autoReconnect)
@@ -74,6 +76,45 @@ namespace ThingsDB
                 closed = true;
 
             }
+        }
+
+        public async Task<byte[]> Query(string code)
+        {
+            return await Query<string>(defaultScope, code, null);
+        }
+
+        public async Task<byte[]> Query(string scope, string code)
+        {
+            return await Query<string>(scope, code, null);
+        }
+
+        public async Task<byte[]> Query<T>(string code, T? args)
+        {
+            return await Query(defaultScope, code, args);
+        }
+
+        public async Task<byte[]> Query<T>(string scope, string code, T? args)
+        {
+            object[] query;
+            if (args == null)
+            {
+                query = new object[2];
+                query[0] = scope;
+                query[1] = code;
+            }
+            else
+            {
+                query = new object[3];
+                query[0] = scope;
+                query[1] = code;
+                query[2] = args;
+            }
+
+            byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
+            Package pkg = new(Package.Type.ReqQuery, GetNextPid(), data);
+            Package result = await Write(pkg);
+            Package.RaiseOnErr(result);
+            return result.Data();
         }
 
         private ushort GetNextPid()
@@ -144,11 +185,6 @@ namespace ThingsDB
             }
         }
 
-        private async Task Connect()
-        {
-            await Task.Delay(1);
-        }
-
         private void CloseOnError()
         {
             client.Close();
@@ -161,8 +197,7 @@ namespace ThingsDB
 
         private async Task ListenAsync()
         {
-            var buffer = new byte[512];
-            int offset = 0;
+
             Package? pkg = null;
 
             try
@@ -174,6 +209,8 @@ namespace ThingsDB
                     {
                         break;
                     }
+                    var buffer = new byte[512];
+                    int offset = 0; // TODO
                     int n = await stream.ReadAsync(buffer.AsMemory(offset, buffer.Length - offset));
                     if (n < 0)
                     {
