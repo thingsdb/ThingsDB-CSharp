@@ -1,5 +1,7 @@
-﻿using System.Net.Security;
+﻿using System.Diagnostics;
+using System.Net.Security;
 using System.Net.Sockets;
+using System;
 
 namespace ThingsDB
 {
@@ -13,26 +15,31 @@ namespace ThingsDB
         private bool autoReconnect;
         private bool closed;
         private Stream? stream;
+        private readonly bool useSsl;
         private readonly TcpClient client = new();
         private readonly Dictionary<int, TaskCompletionSource<Package>> lookup = new();
         private ushort next_pid;
         private StreamWriter? logStream;
 
-        public Connector(string host) : this(host, 9000, "/thingsdb") { }
-        public Connector(string host, int port) : this(host, port, "/thingsdb") { }
-        public Connector(string host, string defaultScope) : this(host, 9000, defaultScope) { }
-        public Connector(string host, int port, string defaultScope)
+        public Connector(string host) : this(host, 9000, "/thingsdb", false) { }
+        public Connector(string host, int port) : this(host, port, "/thingsdb", false) { }
+        public Connector(string host, string defaultScope) : this(host, 9000, defaultScope, false) { }
+        public Connector(string host, int port, string defaultScope) : this(host, port, defaultScope, false) { }
+        public Connector(string host, bool useSsl) : this(host, 9000, "/thingsdb", useSsl) { }
+        public Connector(string host, int port, bool useSsl) : this(host, port, "/thingsdb", useSsl) { }
+        public Connector(string host, string defaultScope, bool useSsl) : this(host, 9000, defaultScope, useSsl) { }
+        public Connector(string host, int port, string defaultScope, bool useSsl)
         {
             this.host = host;
             this.port = port;
+            this.useSsl = useSsl;
             token = null;
             auth = null;
             this.defaultScope = defaultScope;
             stream = null;
-            closed = false;
+            closed = false;            
             autoReconnect = true;
-            next_pid = 0;
-            _ = ListenAsync();
+            next_pid = 0;            
         }
 
         public void SetAutoReconnect(bool autoReconnect)
@@ -42,31 +49,21 @@ namespace ThingsDB
 
         public bool IsAutoReconnect() { return autoReconnect; }
 
-        public void SetLogStream(StreamWriter? logStream) { 
-            this.logStream = logStream; 
+        public void SetLogStream(StreamWriter? logStream)
+        {
+            this.logStream = logStream;
         }
-
 
         public async Task Connect(string token)
         {
-            if (token == null)
-            {
-                throw new ArgumentNullException(nameof(token));
-            }
-            this.token = token;
+            this.token = token ?? throw new ArgumentNullException(nameof(token));
+            await ConnectAttempt();
         }
 
         public async Task Connect(string username, string password)
         {
-            if (username == null)
-            {
-                throw new ArgumentNullException(nameof(username));
-            }
-            if (password == null)
-            {
-                throw new ArgumentNullException(nameof(password));
-            }
             auth = new string[2] { username, password };
+            await ConnectAttempt();
         }
 
         public void Close()
@@ -90,12 +87,6 @@ namespace ThingsDB
         {
             Package pkg;
 
-            if (stream == null)
-            {
-                await client.ConnectAsync(host, port);
-                stream = new SslStream(client.GetStream());
-            }
-
             if (token != null)
             {
                 byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
@@ -106,21 +97,42 @@ namespace ThingsDB
                 byte[] data = MessagePack.MessagePackSerializer.Serialize(auth);
                 pkg = new(Package.Type.ReqAuth, GetNextPid(), data);
             }
+
+            if (stream == null)
+            {
+                await client.ConnectAsync(host, port);
+                var sslStream = new SslStream(client.GetStream());
+                await sslStream.AuthenticateAsClientAsync(host);
+                stream = sslStream;
+                _ = ListenAsync();
+            }
+        
+            Package result = await Write(pkg);
+            Package.RaiseOnErr(result);
+
+            Debug.Assert(result.Tp() == Package.Type.ResAuth, "Package type must be ResAuth or an error");
         }
 
         private async Task<Package> Write(Package pkg)
         {
             Package result;
-            var promise = new TaskCompletionSource<Package>();
+            TaskCompletionSource<Package> promise = new();
+
+            TaskCompletionSource<Package>? prev;
+            if (lookup.TryGetValue(pkg.Pid(), out prev))
+            {
+                prev.SetException(new Package.Overwritten());
+            }
+
+            // Overwrite Pid if it existed
             lookup[pkg.Pid()] = promise;
 
             try
             {
                 if (stream != null)
                 {
-                    stream.Write(pkg.Header(), 0, Package.HeaderSize);
-                    stream.Write(pkg.Data(), 0, pkg.Length());
-                    stream.Flush();
+                    await stream.WriteAsync(pkg.Header().AsMemory(0, Package.HeaderSize));
+                    await stream.WriteAsync(pkg.Data().AsMemory(0, pkg.Length()));
                 }
 
                 result = await promise.Task;
@@ -137,62 +149,76 @@ namespace ThingsDB
             await Task.Delay(1);
         }
 
+        private void CloseOnError()
+        {
+            client.Close();
+            stream = null;
+            foreach (TaskCompletionSource<Package> promise in lookup.Values)
+            {
+                promise.SetCanceled();
+            }
+        }
+
         private async Task ListenAsync()
         {
             var buffer = new byte[512];
             int offset = 0;
-            Package? package = null;
+            Package? pkg = null;
 
-            while (true)
+            try
             {
-                if (stream == null)
-                {
-                    await Task.Delay(1);
-                    continue;
-                }
 
-                int n = await stream.ReadAsync(buffer.AsMemory(offset, buffer.Length - offset));
-                if (n <= 0)
+                while (true)
                 {
-                    client.Close();
-                    stream = null;
-                    continue;
-                }
-                n += offset;
-                offset = 0;
-
-                while (offset < n)
-                {
-                    if (package == null)
+                    if (stream == null)
                     {
-                        if (n - offset < Package.HeaderSize)
-                        {
-                            offset = n;
-                            break;
-                        }
-                        package = new(buffer, offset);
-                        offset += Package.HeaderSize;
-                        continue;
+                        break;
                     }
-
-                    offset += package.CopyData(buffer, offset, n - offset);
-                    if (package.IsComplete())
+                    int n = await stream.ReadAsync(buffer.AsMemory(offset, buffer.Length - offset));
+                    if (n < 0)
                     {
-                        var promise = lookup[package.Pid()];
-                        if (promise != null)
+                        throw new InvalidOperationException();
+                    }
+                    n += offset;
+                    offset = 0;
+
+                    while (offset < n)
+                    {
+                        if (pkg == null)
                         {
-                            promise.SetResult(package);
+                            if (n - offset < Package.HeaderSize)
+                            {
+                                offset = n;
+                                break;
+                            }
+                            pkg = new(buffer, offset);
+                            offset += Package.HeaderSize;
                         }
-                        else if (logStream != null)
+                        offset += pkg.CopyData(buffer, offset, n - offset);
+                        if (pkg.IsComplete())
                         {
-                            logStream.WriteLine(string.Format("No promise found for PID {0}", package.Pid()));
+                            TaskCompletionSource<Package>? promise;
+                            if (lookup.TryGetValue(pkg.Pid(), out promise))
+                            {
+                                promise.SetResult(pkg);
+                            }
+                            else if (logStream != null)
+                            {
+                                logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                            }
+                            pkg = null;
                         }
-                        package = null;
                     }
                 }
-
+            }
+            catch (Exception ex)
+            {
+                if (logStream != null)
+                {
+                    logStream.WriteLine(ex.ToString());
+                }
+                CloseOnError();
             }
         }
-
     }
 }
