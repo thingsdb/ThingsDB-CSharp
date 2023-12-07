@@ -7,6 +7,7 @@ namespace ThingsDB
 {
     public class Connector
     {
+        private static readonly int maxWaitTimeRecoonect = 120000;  // in milliseconds
         private static readonly int bufferSize = 8192;
         private readonly string host;
         private readonly int port;
@@ -14,6 +15,7 @@ namespace ThingsDB
         private string[]? auth;
         private string? token;
         private bool autoReconnect;
+        private bool isReconnecting;
         private bool closed;
         private Stream? stream;
         private readonly bool useSsl;
@@ -41,6 +43,7 @@ namespace ThingsDB
             closed = false;
             autoReconnect = true;
             next_pid = 0;
+            isReconnecting = false;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
@@ -56,25 +59,26 @@ namespace ThingsDB
             this.logStream = logStream;
         }
 
-        public async Task Connect(string token)
+        public async Task Connect(string token) { await Connect(token, TimeSpan.FromSeconds(10.0)); }
+        public async Task Connect(string token, TimeSpan timeout)
         {
             this.token = token ?? throw new ArgumentNullException(nameof(token));
-            await ConnectAttempt();
+            await ConnectAttempt(timeout);
         }
 
-        public async Task Connect(string username, string password)
+        public async Task Connect(string username, string password) { await Connect(username, password, TimeSpan.FromSeconds(10.0)); }
+        public async Task Connect(string username, string password, TimeSpan timeout)
         {
             auth = new string[2] { username, password };
-            await ConnectAttempt();
+            await ConnectAttempt(timeout);
         }
 
         public void Close()
         {
             if (!closed && stream != null)
             {
-                client.Close();
                 closed = true;
-
+                CloseClient();
             }
         }
 
@@ -112,7 +116,7 @@ namespace ThingsDB
 
             byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
-            Package result = await Write(pkg);
+            Package result = await Write(pkg, TimeSpan.FromSeconds(10.0));
             Package.RaiseOnErr(result);
             return result.Data();
         }
@@ -124,7 +128,7 @@ namespace ThingsDB
             return pid;
         }
 
-        private async Task ConnectAttempt()
+        private async Task ConnectAttempt(TimeSpan timeout)
         {
             Package pkg;
 
@@ -155,13 +159,32 @@ namespace ThingsDB
                 _ = ListenAsync();
             }
 
-            Package result = await Write(pkg);
+            Package result = await Write(pkg, timeout);
             Package.RaiseOnErr(result);
 
             Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
         }
 
-        private async Task<Package> Write(Package pkg)
+        private static async Task<TResult> TimeoutAfter<TResult>(Task<TResult> task, TimeSpan timeout)
+        {
+
+            using (var timeoutCancellationTokenSource = new CancellationTokenSource())
+            {
+
+                var completedTask = await Task.WhenAny(task, Task.Delay(timeout, timeoutCancellationTokenSource.Token));
+                if (completedTask == task)
+                {
+                    timeoutCancellationTokenSource.Cancel();
+                    return await task;
+                }
+                else
+                {
+                    throw new TimeoutException("The operation has timed out.");
+                }
+            }
+        }
+
+        private async Task<Package> Write(Package pkg, TimeSpan timeout)
         {
             Package result;
             TaskCompletionSource<Package> promise = new();
@@ -177,13 +200,14 @@ namespace ThingsDB
 
             try
             {
-                if (stream != null)
+                if (stream == null)
                 {
-                    await stream.WriteAsync(pkg.Header().AsMemory(0, Package.HeaderSize));
-                    await stream.WriteAsync(pkg.Data().AsMemory(0, pkg.Length()));
+                    throw new NullReferenceException(nameof(stream));
                 }
+                await stream.WriteAsync(pkg.Header().AsMemory(0, Package.HeaderSize));
+                await stream.WriteAsync(pkg.Data().AsMemory(0, pkg.Length()));
 
-                result = await promise.Task;
+                result = await TimeoutAfter(promise.Task, timeout);
                 return result;
             }
             finally
@@ -192,7 +216,7 @@ namespace ThingsDB
             }
         }
 
-        private void CloseOnError()
+        private void CloseClient()
         {
             client.Close();
             stream = null;
@@ -200,6 +224,39 @@ namespace ThingsDB
             {
                 promise.SetCanceled();
             }
+            if (!closed && autoReconnect && !isReconnecting)
+            {
+                isReconnecting = true;
+                _ = Reconnect();
+            }
+        }
+
+        private async Task Reconnect()
+        {
+            int wait = 1000;  // start with one second
+            while (true)
+            {
+                try
+                {
+                    await ConnectAttempt(TimeSpan.FromSeconds(10.0));
+                }
+                catch (Exception ex)
+                {
+                    if (logStream != null)
+                    {
+                        logStream.WriteLine(ex.ToString());
+                    }
+                    await Task.Delay(wait);
+                    wait *= 2;
+                    if (wait > maxWaitTimeRecoonect)
+                    {
+                        wait = maxWaitTimeRecoonect;
+                    }
+                    continue;
+                }
+                break;  // success
+            }
+            isReconnecting = false;
         }
 
         private async Task ListenAsync()
@@ -264,7 +321,7 @@ namespace ThingsDB
                 {
                     logStream.WriteLine(ex.ToString());
                 }
-                CloseOnError();
+                CloseClient();
             }
         }
     }
