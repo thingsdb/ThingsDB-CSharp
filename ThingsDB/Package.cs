@@ -11,84 +11,84 @@ namespace ThingsDB
         public int Code;
     }
 
+    public enum PackageType : byte
+    {
+        NodeStatus = 0, // {id: x, status:...}
+
+        Warn = 5,       // {warn_msg:..., warn_code: x}
+
+        RoomJoin = 6,   // {id: x}
+        RoomLeave = 7,  // {id: x}
+        RoomEmit = 8,   // {id: x, event: ..., args:[...]}
+        RoomDelete = 9, // {id: x}
+
+        ResPong = 16,   // Empty
+        ResAuth = 17,   // Empty
+        ResData = 18,   // ...
+        ResError = 19,  // {error_msg: ..., error_code: x}
+
+        ReqPing = 32,   // Empty
+        ReqAuth = 33,   // [user, pass] or token            
+        ReqQuery = 34,  // [scope, code, {variable}]
+
+        ReqRun = 37,    // [scope, procedure, [[args]/{kw}]
+        ReqJoin = 38,   // [scope, ...room ids]
+        ReqLeave = 39,  // [scope, ...room ids]
+        ReqEmit = 40,   // [scope, room_id, event, ...args]
+    }
+
+    public class PackageException : Exception { }
+    public class UnknownType : PackageException { }
+    public class InvalidCheckBit : PackageException { }
+    public class SizeMismatch : PackageException { }
+    public class Overwritten : PackageException { }
+    public class InvalidData : PackageException { }
+
+    [Serializable]
+    public class TiResponseException : Exception
+    {
+        public readonly string Msg;
+        public readonly int Code;
+
+        public TiResponseException(string msg, int code) : base(msg)
+        {
+            Msg = msg;
+            Code = code;
+        }
+    }
+
+    // custom error
+    public class TiError : TiResponseException { public TiError(string msg, int code) : base(msg, code) { } }               // ...
+
+    // build-in errors
+    public class Cancelled : TiResponseException { public Cancelled(string msg, int code) : base(msg, code) { } }           // -64
+    public class Operation : TiResponseException { public Operation(string msg, int code) : base(msg, code) { } }           // -63
+    public class NumArguments : TiResponseException { public NumArguments(string msg, int code) : base(msg, code) { } }     // -62
+    public class TypeError : TiResponseException { public TypeError(string msg, int code) : base(msg, code) { } }           // -61
+    public class ValueError : TiResponseException { public ValueError(string msg, int code) : base(msg, code) { } }         // -60
+    public class Overflow : TiResponseException { public Overflow(string msg, int code) : base(msg, code) { } }             // -59
+    public class ZeroDiv : TiResponseException { public ZeroDiv(string msg, int code) : base(msg, code) { } }               // -58
+    public class MaxQuota : TiResponseException { public MaxQuota(string msg, int code) : base(msg, code) { } }             // -57
+    public class AuthError : TiResponseException { public AuthError(string msg, int code) : base(msg, code) { } }           // -56
+    public class Forbidden : TiResponseException { public Forbidden(string msg, int code) : base(msg, code) { } }           // -55
+    public class LookupError : TiResponseException { public LookupError(string msg, int code) : base(msg, code) { } }       // -54
+    public class BadData : TiResponseException { public BadData(string msg, int code) : base(msg, code) { } }               // -53
+    public class SyntaxError : TiResponseException { public SyntaxError(string msg, int code) : base(msg, code) { } }       // -52
+    public class NodeError : TiResponseException { public NodeError(string msg, int code) : base(msg, code) { } }           // -51
+    public class AssertError : TiResponseException { public AssertError(string msg, int code) : base(msg, code) { } }       // -50
+
+    // internal errors
+    public class ResultTooLarge : TiResponseException { public ResultTooLarge(string msg, int code) : base(msg, code) { } } // -6
+    public class RequestTimeout : TiResponseException { public RequestTimeout(string msg, int code) : base(msg, code) { } } // -5
+    public class RequestCancel : TiResponseException { public RequestCancel(string msg, int code) : base(msg, code) { } }   // -4
+    public class WriteUV : TiResponseException { public WriteUV(string msg, int code) : base(msg, code) { } }               // -3
+    public class Memory : TiResponseException { public Memory(string msg, int code) : base(msg, code) { } }                 // -2
+    public class Internal : TiResponseException { public Internal(string msg, int code) : base(msg, code) { } }             // -1
+    public class Success : TiResponseException { public Success(string msg, int code) : base(msg, code) { } }               // 0
+
     internal class Package
     {
-        public enum Type : byte
-        {
-            NodeStatus = 0, // {id: x, status:...}
-
-            Warn = 5,       // {warn_msg:..., warn_code: x}
-
-            RoomJoin = 6,   // {id: x}
-            RoomLeave = 7,  // {id: x}
-            RoomEmit = 8,   // {id: x, event: ..., args:[...]}
-            RoomDelete = 9, // {id: x}
-
-            ResPong = 16,   // Empty
-            ResAuth = 17,   // Empty
-            ResData = 18,   // ...
-            ResError = 19,  // {error_msg: ..., error_code: x}
-
-            ReqPing = 32,   // Empty
-            ReqAuth = 33,   // [user, pass] or token            
-            ReqQuery = 34,  // [scope, code, {variable}]
-
-            ReqRun = 37,    // [scope, procedure, [[args]/{kw}]
-            ReqJoin = 38,   // [scope, ...room ids]
-            ReqLeave = 39,  // [scope, ...room ids]
-            ReqEmit = 40,   // [scope, room_id, event, ...args]
-        }
-
         static public readonly int HeaderSize = 8;
-
-        public class PackageException : Exception { }
-        public class UnknownType : PackageException { }
-        public class InvalidCheckBit : PackageException { }
-        public class SizeMismatch : PackageException { }
-        public class Overwritten : PackageException { }
-        public class InvalidData : PackageException { }
-
-        [Serializable]
-        public class TiResponseException : Exception
-        {
-            public readonly string Msg;
-            public readonly int Code;
-
-            public TiResponseException(string msg, int code) : base(msg)
-            {
-                Msg = msg;
-                Code = code;                
-            }
-        }        
-
-        // custom error
-        public class TiError : TiResponseException { public TiError(string msg, int code) : base(msg, code) { } }               // ...
-
-        // build-in errors
-        public class Cancelled : TiResponseException { public Cancelled(string msg, int code) : base(msg, code) { } }           // -64
-        public class Operation : TiResponseException { public Operation(string msg, int code) : base(msg, code) { } }           // -63
-        public class NumArguments : TiResponseException { public NumArguments(string msg, int code) : base(msg, code) { } }     // -62
-        public class TypeError : TiResponseException { public TypeError(string msg, int code) : base(msg, code) { } }           // -61
-        public class ValueError : TiResponseException { public ValueError(string msg, int code) : base(msg, code) { } }         // -60
-        public class Overflow : TiResponseException { public Overflow(string msg, int code) : base(msg, code) { } }             // -59
-        public class ZeroDiv : TiResponseException { public ZeroDiv(string msg, int code) : base(msg, code) { } }               // -58
-        public class MaxQuota : TiResponseException { public MaxQuota(string msg, int code) : base(msg, code) { } }             // -57
-        public class AuthError : TiResponseException { public AuthError(string msg, int code) : base(msg, code) { } }           // -56
-        public class Forbidden : TiResponseException { public Forbidden(string msg, int code) : base(msg, code) { } }           // -55
-        public class LookupError : TiResponseException { public LookupError(string msg, int code) : base(msg, code) { } }       // -54
-        public class BadData : TiResponseException { public BadData(string msg, int code) : base(msg, code) { } }               // -53
-        public class SyntaxError : TiResponseException { public SyntaxError(string msg, int code) : base(msg, code) { } }       // -52
-        public class NodeError : TiResponseException { public NodeError(string msg, int code) : base(msg, code) { } }           // -51
-        public class AssertError : TiResponseException { public AssertError(string msg, int code) : base(msg, code) { } }       // -50
-
-        // internal errors
-        public class ResultTooLarge : TiResponseException { public ResultTooLarge(string msg, int code) : base(msg, code) { } } // -6
-        public class RequestTimeout : TiResponseException { public RequestTimeout(string msg, int code) : base(msg, code) { } } // -5
-        public class RequestCancel : TiResponseException { public RequestCancel(string msg, int code) : base(msg, code) { } }   // -4
-        public class WriteUV : TiResponseException { public WriteUV(string msg, int code) : base(msg, code) { } }               // -3
-        public class Memory : TiResponseException { public Memory(string msg, int code) : base(msg, code) { } }                 // -2
-        public class Internal : TiResponseException { public Internal(string msg, int code) : base(msg, code) { } }             // -1
-        public class Success : TiResponseException { public Success(string msg, int code) : base(msg, code) { } }               // 0
 
         private readonly byte tp;
         private readonly byte checkBit;
@@ -98,20 +98,20 @@ namespace ThingsDB
         private readonly byte[] data;
         private int size;  // size actually written in data; if less than length the package is not complete
 
-        public Package(byte[] header, int offset)
+        public Package(byte[] header)
         {
-            tp = header[offset+6];
-            checkBit = header[offset + 7];
+            tp = header[6];
+            checkBit = header[7];
 
             if (BitConverter.IsLittleEndian)
             {
-                length = header[offset];
-                pid = header[offset + 4];
+                length = header[0];
+                pid = header[4];
             }
             else
             {
                 byte[] tmp = new byte[6];
-                Array.Copy(header, offset, tmp, 0, 6);
+                Array.Copy(header, 0, tmp, 0, 6);
                 Array.Reverse(tmp);
                 length = tmp[2];
                 pid = tmp[0];
@@ -125,7 +125,7 @@ namespace ThingsDB
             data = new byte[length];
         }
 
-        public Package(Type tp, ushort pid, byte[] data)
+        public Package(PackageType tp, ushort pid, byte[] data)
         {
             this.tp = (byte)tp;
             checkBit = (byte)(this.tp ^ 0xff);
@@ -150,7 +150,7 @@ namespace ThingsDB
             return size == length;
         }
 
-        public Type Tp() { return (Type)tp; }
+        public PackageType Tp() { return (PackageType)tp; }
         public int Pid() { return pid; }
         public int Length() { return (int)length; }
 
@@ -188,7 +188,7 @@ namespace ThingsDB
 
         static public void RaiseOnErr(Package pkg)
         {
-            if (pkg.Tp() == Type.ResError)
+            if (pkg.Tp() == PackageType.ResError)
             {
                 ErrorType err = MessagePackSerializer.Deserialize<ErrorType>(pkg.data);
                 throw err.Code switch

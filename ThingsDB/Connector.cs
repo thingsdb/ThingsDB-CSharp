@@ -1,13 +1,13 @@
 ﻿using System.Diagnostics;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
-using System;
-using System.Net;
 
 namespace ThingsDB
 {
     public class Connector
     {
+        private static readonly int bufferSize = 8192;
         private readonly string host;
         private readonly int port;
         private readonly string defaultScope;
@@ -38,7 +38,7 @@ namespace ThingsDB
             auth = null;
             this.defaultScope = defaultScope;
             stream = null;
-            closed = false;            
+            closed = false;
             autoReconnect = true;
             next_pid = 0;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
@@ -111,7 +111,7 @@ namespace ThingsDB
             }
 
             byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
-            Package pkg = new(Package.Type.ReqQuery, GetNextPid(), data);
+            Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
             Package result = await Write(pkg);
             Package.RaiseOnErr(result);
             return result.Data();
@@ -131,27 +131,34 @@ namespace ThingsDB
             if (token != null)
             {
                 byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
-                pkg = new(Package.Type.ReqAuth, GetNextPid(), data);
+                pkg = new(PackageType.ReqAuth, GetNextPid(), data);
             }
             else
             {
                 byte[] data = MessagePack.MessagePackSerializer.Serialize(auth);
-                pkg = new(Package.Type.ReqAuth, GetNextPid(), data);
+                pkg = new(PackageType.ReqAuth, GetNextPid(), data);
             }
 
             if (stream == null)
             {
                 await client.ConnectAsync(host, port);
-                var sslStream = new SslStream(client.GetStream());
-                await sslStream.AuthenticateAsClientAsync(host);
-                stream = sslStream;
+                if (useSsl)
+                {
+                    var sslStream = new SslStream(client.GetStream());
+                    await sslStream.AuthenticateAsClientAsync(host);
+                    stream = sslStream;
+                }
+                else
+                {
+                    stream = client.GetStream();
+                }
                 _ = ListenAsync();
             }
-        
+
             Package result = await Write(pkg);
             Package.RaiseOnErr(result);
 
-            Debug.Assert(result.Tp() == Package.Type.ResAuth, "Package type must be ResAuth or an error");
+            Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
         }
 
         private async Task<Package> Write(Package pkg)
@@ -162,7 +169,7 @@ namespace ThingsDB
             TaskCompletionSource<Package>? prev;
             if (lookup.TryGetValue(pkg.Pid(), out prev))
             {
-                prev.SetException(new Package.Overwritten());
+                prev.SetException(new Overwritten());
             }
 
             // Overwrite Pid if it existed
@@ -197,40 +204,37 @@ namespace ThingsDB
 
         private async Task ListenAsync()
         {
-
+            var buffer = new byte[bufferSize];
+            int offset, n = 0;
             Package? pkg = null;
 
             try
             {
-
                 while (true)
                 {
                     if (stream == null)
                     {
                         break;
                     }
-                    var buffer = new byte[512];
-                    int offset = 0; // TODO
-                    int n = await stream.ReadAsync(buffer.AsMemory(offset, buffer.Length - offset));
-                    if (n < 0)
+                    int numBytesRead = await stream.ReadAsync(buffer.AsMemory(n, bufferSize - n));
+                    if (numBytesRead < 0)
                     {
                         throw new InvalidOperationException();
                     }
-                    n += offset;
-                    offset = 0;
-
-                    while (offset < n)
+                    n += numBytesRead;
+                    while (n > 0)
                     {
+                        offset = 0;
                         if (pkg == null)
                         {
-                            if (n - offset < Package.HeaderSize)
+                            if (n < Package.HeaderSize)
                             {
-                                offset = n;
                                 break;
                             }
-                            pkg = new(buffer, offset);
-                            offset += Package.HeaderSize;
+                            pkg = new(buffer);
+                            offset = Package.HeaderSize;
                         }
+
                         offset += pkg.CopyData(buffer, offset, n - offset);
                         if (pkg.IsComplete())
                         {
@@ -244,6 +248,12 @@ namespace ThingsDB
                                 logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
                             }
                             pkg = null;
+                        }
+
+                        n -= offset;
+                        if (n > 0)
+                        {
+                            Array.Copy(buffer, offset, buffer, 0, n);
                         }
                     }
                 }
