@@ -248,24 +248,7 @@ namespace ThingsDB
 
             Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
         }
-        private static async Task<TResult> TimeoutAfter<TResult>(Task<TResult> task, TimeSpan timeout)
-        {
 
-            using (var timeoutCancellationTokenSource = new CancellationTokenSource())
-            {
-
-                var completedTask = await Task.WhenAny(task, Task.Delay(timeout, timeoutCancellationTokenSource.Token));
-                if (completedTask == task)
-                {
-                    timeoutCancellationTokenSource.Cancel();
-                    return await task;
-                }
-                else
-                {
-                    throw new TimeoutException("The operation has timed out.");
-                }
-            }
-        }
         private async Task<Package> Write(Package pkg, TimeSpan timeout)
         {
             Package result;
@@ -288,7 +271,7 @@ namespace ThingsDB
 
                 await stream.WriteAsync(pkg.GetBytes());
 
-                result = await TimeoutAfter(promise.Task, timeout);
+                result = await Util.TimeoutAfter(promise.Task, timeout);
                 return result;
             }
             finally

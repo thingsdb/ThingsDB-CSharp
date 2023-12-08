@@ -14,18 +14,21 @@ namespace ThingsDB
     {
         public delegate void OnEmitHandler(object[] args);
 
-        public abstract void OnInit();
-        public abstract void OnJoin();
-        public abstract void OnLeave();
-        public abstract void OnDelete();
-        public abstract void OnEmit(string eventName, object[] args);
+        virtual public void OnInit() { }
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        virtual public async Task OnJoin() { }
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+        virtual public void OnLeave() { }
+        virtual public void OnDelete() { }
+        virtual public void OnEmit(string eventName, object[] args) { }
 
         private ulong roomId;
-        private bool isJoined;
+        private bool isJoined;        
         private readonly string code;
         private readonly string scope;
         private readonly Connector conn;
         private readonly Dictionary<string, OnEmitHandler> onEmitHandlers;
+        private TaskCompletionSource<int>? joinPromise;
 
         public Room(Connector conn, string code) : this(conn, conn.DefaultScope, code) { }
         public Room(Connector conn, string scope, string code)
@@ -33,6 +36,7 @@ namespace ThingsDB
             roomId = 0;
             isJoined = false;
             onEmitHandlers = new();
+            joinPromise = null;
             this.conn = conn;
             this.code = code;
             this.scope = scope;
@@ -53,8 +57,15 @@ namespace ThingsDB
         {
             onEmitHandlers[eventName] = handler;
         }
-        public async Task Join()
+
+        public async Task Join() { await Join(TimeSpan.FromSeconds(60.0)); }
+        public async Task Join(TimeSpan wait)
         {
+            if (wait.Seconds > 0)
+            {
+                joinPromise = new();
+            }
+
             if (isJoined)
             {
                 throw new RoomAlreadyJoined(string.Format("Room {0} already joinded", roomId));
@@ -80,6 +91,10 @@ namespace ThingsDB
                 }
                 conn.SetRoom(this);
                 OnInit();
+                if (joinPromise != null)
+                {
+                    await Util.TimeoutAfter(joinPromise.Task, wait);
+                }
             }
             catch (Exception)
             {
@@ -87,14 +102,12 @@ namespace ThingsDB
                 throw;
             }
         }
-
-
         internal void OnEvent(RoomEvent ev)
         {
             switch (ev.Tp)
             {
                 case PackageType.RoomJoin:
-                    OnJoin();
+                    _ = HandleOnJoin();
                     break;
                 case PackageType.RoomLeave:
                     conn.UnsetRoom(this);
@@ -118,6 +131,11 @@ namespace ThingsDB
 #pragma warning restore CS8604 // Possible null reference argument.
                     break;                    
             }
+        }
+        private async Task HandleOnJoin()
+        {
+            await OnJoin();
+            joinPromise?.SetResult(1);
         }
     }
 }

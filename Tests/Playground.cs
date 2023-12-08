@@ -24,12 +24,6 @@ namespace Tests
             Msg = null;
         }
 
-        public override void OnInit() { }
-        public override void OnJoin() { }
-        public override void OnLeave() { }
-        public override void OnDelete() { }
-        public override void OnEmit(string _eventName, object[] _args) { }
-
         [Event("set-message")]
         public void SetMessage(object[] args)
         {
