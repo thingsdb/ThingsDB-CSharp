@@ -5,13 +5,15 @@ using System.Net.Sockets;
 
 namespace ThingsDB
 {
+    public class StreamIsNullException : Exception { };
     public class Connector
     {
+        public string DefaultScope { get; set; }
+        public TimeSpan DefaultTimeout { get; set; }
         private static readonly int maxWaitTimeRecoonect = 120000;  // in milliseconds
         private static readonly int bufferSize = 8192;
         private readonly string host;
         private readonly int port;
-        private readonly string defaultScope;
         private string[]? auth;
         private string? token;
         private bool autoReconnect;
@@ -24,26 +26,26 @@ namespace ThingsDB
         private ushort next_pid;
         private StreamWriter? logStream;
 
-        public Connector(string host) : this(host, 9000, "/thingsdb", false) { }
-        public Connector(string host, int port) : this(host, port, "/thingsdb", false) { }
-        public Connector(string host, string defaultScope) : this(host, 9000, defaultScope, false) { }
-        public Connector(string host, int port, string defaultScope) : this(host, port, defaultScope, false) { }
-        public Connector(string host, bool useSsl) : this(host, 9000, "/thingsdb", useSsl) { }
-        public Connector(string host, int port, bool useSsl) : this(host, port, "/thingsdb", useSsl) { }
-        public Connector(string host, string defaultScope, bool useSsl) : this(host, 9000, defaultScope, useSsl) { }
-        public Connector(string host, int port, string defaultScope, bool useSsl)
+        public Connector(string host) : this(host, 9000, false) { }
+        public Connector(string host, int port) : this(host, port, false) { }
+        public Connector(string host, bool useSsl) : this(host, 9000, useSsl) { }
+        public Connector(string host, int port, bool useSsl)
         {
+            DefaultScope = "/thingsdb";
+            DefaultTimeout = TimeSpan.FromSeconds(30.0);
+
             this.host = host;
             this.port = port;
             this.useSsl = useSsl;
+            
             token = null;
             auth = null;
-            this.defaultScope = defaultScope;
             stream = null;
             closed = false;
             autoReconnect = true;
             next_pid = 0;
             isReconnecting = false;
+            
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
@@ -59,14 +61,14 @@ namespace ThingsDB
             this.logStream = logStream;
         }
 
-        public async Task Connect(string token) { await Connect(token, TimeSpan.FromSeconds(10.0)); }
+        public async Task Connect(string token) { await Connect(token, DefaultTimeout); }
         public async Task Connect(string token, TimeSpan timeout)
         {
             this.token = token ?? throw new ArgumentNullException(nameof(token));
             await ConnectAttempt(timeout);
         }
 
-        public async Task Connect(string username, string password) { await Connect(username, password, TimeSpan.FromSeconds(10.0)); }
+        public async Task Connect(string username, string password) { await Connect(username, password, DefaultTimeout); }
         public async Task Connect(string username, string password, TimeSpan timeout)
         {
             auth = new string[2] { username, password };
@@ -84,20 +86,25 @@ namespace ThingsDB
 
         public async Task<byte[]> Query(string code)
         {
-            return await Query<string>(defaultScope, code, null);
+            return await Query<string>(DefaultScope, code, null, DefaultTimeout);
         }
 
         public async Task<byte[]> Query(string scope, string code)
         {
-            return await Query<string>(scope, code, null);
+            return await Query<string>(scope, code, null, DefaultTimeout);
         }
 
         public async Task<byte[]> Query<T>(string code, T? args)
         {
-            return await Query(defaultScope, code, args);
+            return await Query(DefaultScope, code, args, DefaultTimeout);
         }
 
         public async Task<byte[]> Query<T>(string scope, string code, T? args)
+        {
+            return await Query(scope, code, args, DefaultTimeout);
+        }
+
+        public async Task<byte[]> Query<T>(string scope, string code, T? args, TimeSpan timeout)
         {
             object[] query;
             if (args == null)
@@ -116,7 +123,50 @@ namespace ThingsDB
 
             byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
-            Package result = await Write(pkg, TimeSpan.FromSeconds(10.0));
+            Package result = await EnsureWrite(pkg, timeout);
+            Package.RaiseOnErr(result);
+            return result.Data();
+        }
+        public async Task<byte[]> Run(string procedure)
+        {
+            return await Run<string>(DefaultScope, procedure, null, DefaultTimeout);
+        }
+
+        public async Task<byte[]> Run(string scope, string procedure)
+        {
+            return await Run<string>(scope, procedure, null, DefaultTimeout);
+        }
+
+        public async Task<byte[]> Run<T>(string procedure, T? argsOrKwargs)
+        {
+            return await Run(DefaultScope, procedure, argsOrKwargs, DefaultTimeout);
+        }
+
+        public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs)
+        {
+            return await Run(scope, procedure, argsOrKwargs, DefaultTimeout);
+        }
+
+        public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs, TimeSpan timeout)
+        {
+            object[] query;
+            if (argsOrKwargs == null)
+            {
+                query = new object[2];
+                query[0] = scope;
+                query[1] = procedure;
+            }
+            else
+            {
+                query = new object[3];
+                query[0] = scope;
+                query[1] = procedure;
+                query[2] = argsOrKwargs;
+            }
+
+            byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
+            Package pkg = new(PackageType.ReqRun, GetNextPid(), data);
+            Package result = await EnsureWrite(pkg, timeout);
             Package.RaiseOnErr(result);
             return result.Data();
         }
@@ -189,8 +239,7 @@ namespace ThingsDB
             Package result;
             TaskCompletionSource<Package> promise = new();
 
-            TaskCompletionSource<Package>? prev;
-            if (lookup.TryGetValue(pkg.Pid(), out prev))
+            if (lookup.TryGetValue(pkg.Pid(), out TaskCompletionSource<Package>? prev))
             {
                 prev.SetException(new Overwritten());
             }
@@ -202,10 +251,10 @@ namespace ThingsDB
             {
                 if (stream == null)
                 {
-                    throw new NullReferenceException(nameof(stream));
+                    throw new StreamIsNullException();
                 }
-                await stream.WriteAsync(pkg.Header().AsMemory(0, Package.HeaderSize));
-                await stream.WriteAsync(pkg.Data().AsMemory(0, pkg.Length()));
+
+                await stream.WriteAsync(pkg.GetBytes());
 
                 result = await TimeoutAfter(promise.Task, timeout);
                 return result;
@@ -213,6 +262,51 @@ namespace ThingsDB
             finally
             {
                 lookup.Remove(pkg.Pid());
+            }
+        }
+
+        private async Task<Package> EnsureWrite(Package pkg, TimeSpan timeout)
+        {
+            int wait = 250;  // start with 250 milliseconds
+            Stopwatch sw = new();
+            sw.Start();
+            try
+            {
+                while (true)
+                {
+                    try
+                    {
+                        var result = await Write(pkg, timeout);
+                        return result;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (logStream != null)
+                        {
+                            logStream.WriteLine(ex.ToString());
+                        }
+                        if (sw.Elapsed > timeout)
+                        {
+                            throw new TimeoutException("The query has timed out");
+                        }
+                        if (!closed && autoReconnect && (ex is StreamIsNullException || ex is CancelledException))
+                        {
+                            if (!isReconnecting)
+                            {
+                                CloseClient();
+                            }
+                            await Task.Delay(wait);
+                            wait *= 2;
+                            continue;
+                        }
+                        else
+                            throw;
+                    }
+                }
+            }
+            finally
+            {
+                sw.Stop();
             }
         }
 
