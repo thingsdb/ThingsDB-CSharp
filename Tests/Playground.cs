@@ -1,5 +1,6 @@
 using MessagePack;
 using NUnit.Framework;
+using System;
 using System.Threading.Tasks;
 using ThingsDB;
 
@@ -29,8 +30,8 @@ namespace Tests
         public override void OnDelete() { }
         public override void OnEmit(string _eventName, object[] _args) { }
 
-        [Event("on-message")]
-        public void OnMessage(object[] args)
+        [Event("set-message")]
+        public void SetMessage(object[] args)
         {
             Msg = (string)args[0];
         }
@@ -39,20 +40,21 @@ namespace Tests
     public class Tests
     {
         private readonly string token = "Fai6NmH7QYxA6WLYPdtgcy";
-        private Connector? thingsdb;
+        private Connector? conn;
 
         [SetUp]
         public void SetUp()
         {
-            thingsdb = new("playground.thingsdb.net", 9400, true);
-            thingsdb.DefaultScope = "//Doc";
+            conn = new("playground.thingsdb.net", 9400, true);
+            conn.DefaultScope = "//Doc";
+            conn.SetLogStream(Console.Out);
         }
 
         [Test]
         public async Task TestConnectAndAuthenticate()
         {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-            await thingsdb.Connect(token);
+            await conn.Connect(token);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Connect and authenticate success");
         }
@@ -61,8 +63,8 @@ namespace Tests
         public async Task TestQuery()
         {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-            await thingsdb.Connect(token);
-            var data = await thingsdb.Query("1 + 2;");
+            await conn.Connect(token);
+            var data = await conn.Query("1 + 2;");
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 3);
@@ -71,7 +73,7 @@ namespace Tests
                 A = 3,
                 B = 4
             };
-            data = await thingsdb.Query("a + b;", args);
+            data = await conn.Query("a + b;", args);
             Assert.IsNotNull(data);
             intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 7);
@@ -83,12 +85,12 @@ namespace Tests
         public async Task TestErrQuery()
         {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-            await thingsdb.Connect(token);
+            await conn.Connect(token);
 
             ZeroDivException? expectedException = null;
             try
             {
-                _ = await thingsdb.Query("1/0;");
+                _ = await conn.Query("1/0;");
             }
             catch (ZeroDivException ex)
             {
@@ -106,13 +108,13 @@ namespace Tests
         public async Task TestRun()
         {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-            await thingsdb.Connect(token);
+            await conn.Connect(token);
             var args = new TestAB
             {
                 A = 6,
                 B = 7
             };
-            var data = await thingsdb.Run("multiply", args);
+            var data = await conn.Run("multiply", args);
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 42);
@@ -123,26 +125,26 @@ namespace Tests
         [Test]
         public async Task TestRoom()
         {
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
 #pragma warning disable CS8604 // Possible null reference argument.
-            var myRoom = new MyRoom(thingsdb);
-            await thingsdb.Connect(token);
+            var myRoom = new MyRoom(conn);
+            await conn.Connect(token);
             await myRoom.Join();
-            await thingsdb.Query(".emitter.emit('set-message', 'test message');");
+            await conn.Query(".emitter.emit('set-message', 'test message');");
+            
+            // wait for one second so we have enough time to receive the emit
             await Task.Delay(1000);
             Assert.AreEqual(myRoom.Msg, "test message");
 
 #pragma warning restore CS8604 // Possible null reference argument.
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Room success");
         }
 
         [TearDown]
         public void TearDown()
         {
-            if (thingsdb != null)
+            if (conn != null)
             {
-                thingsdb.Close();
+                conn.Close();
             }
         }
     }

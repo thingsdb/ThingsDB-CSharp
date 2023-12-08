@@ -12,20 +12,13 @@ namespace ThingsDB
 
     abstract public class Room
     {
-        public delegate int OnEmitHandler(object[] args);
+        public delegate void OnEmitHandler(object[] args);
 
         public abstract void OnInit();
         public abstract void OnJoin();
         public abstract void OnLeave();
         public abstract void OnDelete();
         public abstract void OnEmit(string eventName, object[] args);
-
-        [MessagePackObject]
-        private class SingleRoomId
-        {
-            [Key(0)]
-            public ulong Id { get; set; }
-        }
 
         private ulong roomId;
         private bool isJoined;
@@ -43,18 +36,13 @@ namespace ThingsDB
             this.conn = conn;
             this.code = code;
             this.scope = scope;
-            foreach (PropertyInfo prop in GetType().GetProperties())
+            foreach (MethodInfo prop in GetType().GetMethods())
             {                
                 foreach (Attribute attribute in prop.GetCustomAttributes(true))
                 {
-                    if (attribute is Event)
+                    if (attribute is Event ev)
                     {
-                        Event ev = (Event)attribute;
-                        MethodInfo? methodInfo = prop.GetMethod;
-                        if (methodInfo != null)
-                        {
-                            SetOnEmitHandler(ev.Name, methodInfo.CreateDelegate<OnEmitHandler>());
-                        }                        
+                        SetOnEmitHandler(ev.Name, (OnEmitHandler)Delegate.CreateDelegate(typeof(OnEmitHandler), this, prop));                    
                     }
                 }
             }
@@ -69,7 +57,7 @@ namespace ThingsDB
         {
             if (isJoined)
             {
-                throw new RoomAlreadyJoined();
+                throw new RoomAlreadyJoined(string.Format("Room {0} already joinded", roomId));
             }
             isJoined = true;
             try
@@ -78,12 +66,17 @@ namespace ThingsDB
                 {
                     if (code == "")
                     {
-                        throw new EmptyCodeAndRoomId();
+                        throw new EmptyCodeAndRoomId("Either a roomId or code to find the room Id must be given");
                     }
 
                     var result = await conn.Query(scope, code);
-                    SingleRoomId singleRoomId = MessagePackSerializer.Deserialize<SingleRoomId>(result);
-                    roomId = singleRoomId.Id;
+                    roomId = MessagePackSerializer.Deserialize<ulong>(result);
+                }
+                ulong[] roomIds = new ulong[1] { roomId };
+                var response = await conn.Join(scope, roomIds);
+                if (response[0] != roomId)
+                {
+                    throw new RoomNotFound(string.Format("Room with Id {0} not found", roomId));
                 }
                 conn.SetRoom(this);
                 OnInit();
@@ -94,6 +87,7 @@ namespace ThingsDB
                 throw;
             }
         }
+
 
         internal void OnEvent(RoomEvent ev)
         {
@@ -111,14 +105,17 @@ namespace ThingsDB
                     OnDelete();
                     break;
                 case PackageType.RoomEmit:
-                    if (onEmitHandlers.TryGetValue(ev.Event, out var handler))
+                    var evEmit = (RoomEventEmit)ev;
+#pragma warning disable CS8604 // Possible null reference argument.
+                    if (onEmitHandlers.TryGetValue(evEmit.Event, out var handler))
                     {
-                        handler.Invoke(ev.Args);
+                        handler.Invoke(evEmit.Args);
                     }
                     else
                     {
-                        OnEmit(ev.Event, ev.Args);
+                        OnEmit(evEmit.Event, evEmit.Args);
                     }
+#pragma warning restore CS8604 // Possible null reference argument.
                     break;                    
             }
         }

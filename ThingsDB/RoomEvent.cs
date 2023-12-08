@@ -7,17 +7,22 @@ using System.Threading.Tasks;
 
 namespace ThingsDB
 {
-    [MessagePackObject]
-    internal struct RoomEvent
+    [MessagePackObject(false)]
+    public class RoomEvent
     {
         [IgnoreMember]
         public PackageType Tp { get; set; }
 
         [Key("id")]
         public ulong Id;
+    }
+
+    [MessagePackObject]
+    public class RoomEventEmit : RoomEvent
+    {
         [Key("event")]
-        public string Event;
+        public string? Event;
         [Key("args")]
-        public object[] Args;
+        public object[]? Args;
     }
 }

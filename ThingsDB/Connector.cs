@@ -27,7 +27,7 @@ namespace ThingsDB
         private readonly Dictionary<int, TaskCompletionSource<Package>> pkgLookup;
         private readonly Dictionary<ulong, Room> roomLookup;
         private ushort next_pid;
-        private StreamWriter? logStream;
+        private TextWriter? logStream;
 
         public Connector(string host) : this(host, 9000, false) { }
         public Connector(string host, int port) : this(host, port, false) { }
@@ -63,7 +63,7 @@ namespace ThingsDB
 
         public bool IsAutoReconnect() { return autoReconnect; }
 
-        public void SetLogStream(StreamWriter? logStream)
+        public void SetLogStream(TextWriter? logStream)
         {
             this.logStream = logStream;
         }
@@ -128,10 +128,10 @@ namespace ThingsDB
                 query[2] = args;
             }
 
-            byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
+            byte[] data = MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
-            pkg.RaiseOnErr();
+            result.RaiseOnErr();
             return result.Data();
         }
         public async Task<byte[]> Run(string procedure)
@@ -170,12 +170,13 @@ namespace ThingsDB
                 query[2] = argsOrKwargs;
             }
 
-            byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
+            byte[] data = MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqRun, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
-            pkg.RaiseOnErr();
+            result.RaiseOnErr();
             return result.Data();
         }
+
         internal void SetRoom(Room room)
         {
             roomLookup[room.Id()] = room;
@@ -183,6 +184,27 @@ namespace ThingsDB
         internal void UnsetRoom(Room room)
         {
             _ = roomLookup.Remove(room.Id());
+        }
+        internal async Task<ulong?[]> Join(string scope, ulong[] roomIds)
+        {
+            return await JoinOrLeave(PackageType.ReqJoin, scope, roomIds);
+        }
+        internal async Task<ulong?[]> Leave(string scope, ulong[] roomIds)
+        {
+            return await JoinOrLeave(PackageType.ReqLeave, scope, roomIds);
+        }
+        private async Task<ulong?[]> JoinOrLeave(PackageType tp, string scope, ulong[] roomIds)
+        {
+            object[] query = new object[1 + roomIds.Length];
+            query[0] = scope;
+            Array.Copy(roomIds, 0, query, 1, roomIds.Length);
+
+            byte[] data = MessagePackSerializer.Serialize(query);
+            Package pkg = new(tp, GetNextPid(), data);
+            Package result = await EnsureWrite(pkg, DefaultTimeout);
+            result.RaiseOnErr();
+            var response = MessagePackSerializer.Deserialize<ulong?[]>(result.Data());
+            return response;
         }
         private ushort GetNextPid()
         {
@@ -196,12 +218,12 @@ namespace ThingsDB
 
             if (token != null)
             {
-                byte[] data = MessagePack.MessagePackSerializer.Serialize(token);
+                byte[] data = MessagePackSerializer.Serialize(token);
                 pkg = new(PackageType.ReqAuth, GetNextPid(), data);
             }
             else
             {
-                byte[] data = MessagePack.MessagePackSerializer.Serialize(auth);
+                byte[] data = MessagePackSerializer.Serialize(auth);
                 pkg = new(PackageType.ReqAuth, GetNextPid(), data);
             }
 
@@ -222,7 +244,7 @@ namespace ThingsDB
             }
 
             Package result = await Write(pkg, timeout);
-            pkg.RaiseOnErr();
+            result.RaiseOnErr();
 
             Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
         }
@@ -367,9 +389,22 @@ namespace ThingsDB
         {
             try
             {
-                RoomEvent roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(pkg.Data());
-                roomEvent.Tp = pkg.Tp();
+                RoomEvent roomEvent;
 
+                switch (pkg.Tp())
+                {
+                    case PackageType.RoomJoin:
+                    case PackageType.RoomLeave:
+                    case PackageType.RoomDelete:
+                        roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(pkg.Data());
+                        break;
+                    case PackageType.RoomEmit:
+                        roomEvent = MessagePackSerializer.Deserialize<RoomEventEmit>(pkg.Data());
+                        break;
+                    default:
+                        throw new Exception("Invalid package type");
+                }
+                roomEvent.Tp = pkg.Tp();
                 if (roomLookup.TryGetValue(roomEvent.Id, out Room? room))
                 {
                     room.OnEvent(roomEvent);
@@ -380,7 +415,7 @@ namespace ThingsDB
                 }
             }
             catch (Exception ex)
-            {
+            {                
                 logStream?.WriteLine(ex.ToString());
             }
         }

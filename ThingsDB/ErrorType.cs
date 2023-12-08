@@ -3,7 +3,7 @@
 namespace ThingsDB
 {
     [MessagePackObject]
-    internal struct ErrorType
+    public struct ErrorType
     {
         [Key("error_msg")]
         public string Msg;

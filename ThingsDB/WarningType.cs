@@ -3,7 +3,7 @@
 namespace ThingsDB
 {
     [MessagePackObject]
-    internal struct WarningType
+    public struct WarningType
     {
         [Key("warn_msg")]
         public string Msg;
