@@ -1,15 +1,17 @@
-﻿using System.Diagnostics;
+﻿using MessagePack;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 
 namespace ThingsDB
 {
-    public class StreamIsNullException : Exception { };
     public class Connector
     {
         public string DefaultScope { get; set; }
         public TimeSpan DefaultTimeout { get; set; }
+        public OnNodeStatus? OnNodeStatus { get; set; }
+
         private static readonly int maxWaitTimeRecoonect = 120000;  // in milliseconds
         private static readonly int bufferSize = 8192;
         private readonly string host;
@@ -21,8 +23,9 @@ namespace ThingsDB
         private bool closed;
         private Stream? stream;
         private readonly bool useSsl;
-        private readonly TcpClient client = new();
-        private readonly Dictionary<int, TaskCompletionSource<Package>> lookup = new();
+        private readonly TcpClient client;
+        private readonly Dictionary<int, TaskCompletionSource<Package>> pkgLookup;
+        private readonly Dictionary<ulong, Room> roomLookup;
         private ushort next_pid;
         private StreamWriter? logStream;
 
@@ -33,11 +36,12 @@ namespace ThingsDB
         {
             DefaultScope = "/thingsdb";
             DefaultTimeout = TimeSpan.FromSeconds(30.0);
+            OnNodeStatus = null;
 
             this.host = host;
             this.port = port;
             this.useSsl = useSsl;
-            
+
             token = null;
             auth = null;
             stream = null;
@@ -45,7 +49,10 @@ namespace ThingsDB
             autoReconnect = true;
             next_pid = 0;
             isReconnecting = false;
-            
+            pkgLookup = new();
+            roomLookup = new();
+            client = new();
+
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
@@ -124,7 +131,7 @@ namespace ThingsDB
             byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
-            Package.RaiseOnErr(result);
+            pkg.RaiseOnErr();
             return result.Data();
         }
         public async Task<byte[]> Run(string procedure)
@@ -146,7 +153,6 @@ namespace ThingsDB
         {
             return await Run(scope, procedure, argsOrKwargs, DefaultTimeout);
         }
-
         public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs, TimeSpan timeout)
         {
             object[] query;
@@ -167,17 +173,23 @@ namespace ThingsDB
             byte[] data = MessagePack.MessagePackSerializer.Serialize(query);
             Package pkg = new(PackageType.ReqRun, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
-            Package.RaiseOnErr(result);
+            pkg.RaiseOnErr();
             return result.Data();
         }
-
+        internal void SetRoom(Room room)
+        {
+            roomLookup[room.Id()] = room;
+        }
+        internal void UnsetRoom(Room room)
+        {
+            _ = roomLookup.Remove(room.Id());
+        }
         private ushort GetNextPid()
         {
             ushort pid = next_pid;
             next_pid++;
             return pid;
         }
-
         private async Task ConnectAttempt(TimeSpan timeout)
         {
             Package pkg;
@@ -210,11 +222,10 @@ namespace ThingsDB
             }
 
             Package result = await Write(pkg, timeout);
-            Package.RaiseOnErr(result);
+            pkg.RaiseOnErr();
 
             Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
         }
-
         private static async Task<TResult> TimeoutAfter<TResult>(Task<TResult> task, TimeSpan timeout)
         {
 
@@ -233,19 +244,18 @@ namespace ThingsDB
                 }
             }
         }
-
         private async Task<Package> Write(Package pkg, TimeSpan timeout)
         {
             Package result;
             TaskCompletionSource<Package> promise = new();
 
-            if (lookup.TryGetValue(pkg.Pid(), out TaskCompletionSource<Package>? prev))
+            if (pkgLookup.TryGetValue(pkg.Pid(), out TaskCompletionSource<Package>? prev))
             {
                 prev.SetException(new Overwritten());
             }
 
             // Overwrite Pid if it existed
-            lookup[pkg.Pid()] = promise;
+            pkgLookup[pkg.Pid()] = promise;
 
             try
             {
@@ -261,10 +271,9 @@ namespace ThingsDB
             }
             finally
             {
-                lookup.Remove(pkg.Pid());
+                pkgLookup.Remove(pkg.Pid());
             }
         }
-
         private async Task<Package> EnsureWrite(Package pkg, TimeSpan timeout)
         {
             int wait = 250;  // start with 250 milliseconds
@@ -289,7 +298,10 @@ namespace ThingsDB
                         {
                             throw new TimeoutException("The query has timed out");
                         }
-                        if (!closed && autoReconnect && (ex is StreamIsNullException || ex is CancelledException))
+                        if (!closed && autoReconnect && (
+                            ex is StreamIsNullException ||
+                            ex is CancelledException ||
+                            ex is NodeError))
                         {
                             if (!isReconnecting)
                             {
@@ -309,12 +321,11 @@ namespace ThingsDB
                 sw.Stop();
             }
         }
-
         private void CloseClient()
         {
             client.Close();
             stream = null;
-            foreach (TaskCompletionSource<Package> promise in lookup.Values)
+            foreach (TaskCompletionSource<Package> promise in pkgLookup.Values)
             {
                 promise.SetCanceled();
             }
@@ -351,6 +362,63 @@ namespace ThingsDB
                 break;  // success
             }
             isReconnecting = false;
+        }
+        private void HandleRoom(Package pkg)
+        {
+            try
+            {
+                RoomEvent roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(pkg.Data());
+                roomEvent.Tp = pkg.Tp();
+
+                if (roomLookup.TryGetValue(roomEvent.Id, out Room? room))
+                {
+                    room.OnEvent(roomEvent);
+                }
+                else if (logStream != null)
+                {
+                    logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                }
+            }
+            catch (Exception ex)
+            {
+                logStream?.WriteLine(ex.ToString());
+            }
+        }
+        private void HandleWarning(Package pkg)
+        {
+            if (logStream != null)
+            {
+                try
+                {
+                    WarningType warn = MessagePackSerializer.Deserialize<WarningType>(pkg.Data());
+                    logStream.WriteLine(string.Format("{0} ({1})", warn.Msg, warn.Code));
+                }
+                catch (Exception ex)
+                {
+                    logStream.WriteLine(ex.ToString());
+                }
+            }
+        }
+        private void HandleNodeStatus(Package pkg)
+        {
+            NodeStatus nodeStatus;
+            try
+            {
+                nodeStatus = MessagePackSerializer.Deserialize<NodeStatus>(pkg.Data());
+            }
+            catch (Exception ex)
+            {
+                logStream?.WriteLine(ex.ToString());
+                return;
+            }
+
+            OnNodeStatus?.Invoke(nodeStatus);
+            if (nodeStatus.Status == "SHUTTING_DOWN")
+            {
+                CloseClient();
+            }
+
+            logStream?.WriteLine(string.Format("Node {0} has a new status: {1}", nodeStatus.Id, nodeStatus.Status));
         }
 
         private async Task ListenAsync()
@@ -389,14 +457,30 @@ namespace ThingsDB
                         offset += pkg.CopyData(buffer, offset, n - offset);
                         if (pkg.IsComplete())
                         {
-                            TaskCompletionSource<Package>? promise;
-                            if (lookup.TryGetValue(pkg.Pid(), out promise))
+                            switch (pkg.Tp())
                             {
-                                promise.SetResult(pkg);
-                            }
-                            else if (logStream != null)
-                            {
-                                logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                                case PackageType.NodeStatus:
+                                    HandleNodeStatus(pkg);
+                                    break;
+                                case PackageType.Warn:
+                                    HandleWarning(pkg);
+                                    break;
+                                case PackageType.RoomJoin:
+                                case PackageType.RoomLeave:
+                                case PackageType.RoomEmit:
+                                case PackageType.RoomDelete:
+                                    HandleRoom(pkg);
+                                    break;
+                                default:
+                                    if (pkgLookup.TryGetValue(pkg.Pid(), out TaskCompletionSource<Package>? promise))
+                                    {
+                                        promise.SetResult(pkg);
+                                    }
+                                    else if (logStream != null)
+                                    {
+                                        logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                                    }
+                                    break;
                             }
                             pkg = null;
                         }

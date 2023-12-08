@@ -14,6 +14,28 @@ namespace Tests
         public int B;
     }
 
+    public class MyRoom : Room
+    {
+        public string? Msg;
+
+        public MyRoom(Connector conn) : base(conn, ".emitter.id();") 
+        {
+            Msg = null;
+        }
+
+        public override void OnInit() { }
+        public override void OnJoin() { }
+        public override void OnLeave() { }
+        public override void OnDelete() { }
+        public override void OnEmit(string _eventName, object[] _args) { }
+
+        [Event("on-message")]
+        public void OnMessage(object[] args)
+        {
+            Msg = (string)args[0];
+        }
+    }
+
     public class Tests
     {
         private readonly string token = "Fai6NmH7QYxA6WLYPdtgcy";
@@ -96,6 +118,23 @@ namespace Tests
             Assert.AreEqual(intResult, 42);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Run success");
+        }
+
+        [Test]
+        public async Task TestRoom()
+        {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8604 // Possible null reference argument.
+            var myRoom = new MyRoom(thingsdb);
+            await thingsdb.Connect(token);
+            await myRoom.Join();
+            await thingsdb.Query(".emitter.emit('set-message', 'test message');");
+            await Task.Delay(1000);
+            Assert.AreEqual(myRoom.Msg, "test message");
+
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            Assert.Pass("Room success");
         }
 
         [TearDown]
