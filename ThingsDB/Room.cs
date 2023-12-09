@@ -94,6 +94,7 @@ namespace ThingsDB
                 if (joinPromise != null)
                 {
                     await Util.TimeoutAfter(joinPromise.Task, wait);
+                    joinPromise = null;
                 }
             }
             catch (Exception)

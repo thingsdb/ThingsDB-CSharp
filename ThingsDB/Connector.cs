@@ -245,8 +245,38 @@ namespace ThingsDB
 
             Package result = await Write(pkg, timeout);
             result.RaiseOnErr();
-
+            try
+            {
+                var roomMap = GetRoomMap();
+                foreach (KeyValuePair<string, List<ulong>> entry in roomMap)
+                {
+                    await Join(entry.Key, entry.Value.ToArray());
+                }
+            }
+            catch (Exception ex)
+            {
+                logStream?.WriteLine(ex);
+            }
             Debug.Assert(result.Tp() == PackageType.ResAuth, "Package type must be ResAuth or an error");
+        }
+
+        private Dictionary<string, List<ulong>> GetRoomMap()
+        {
+            var roomMap = new Dictionary<string, List<ulong>>();
+            foreach (Room room in roomLookup.Values)
+            {
+                if (roomMap.TryGetValue(room.Scope(), out var roomIds))
+                {
+                    roomIds.Add(room.Id());
+                }
+                else
+                {
+                    roomIds = new();
+                    roomIds.Add(room.Id());
+                    roomMap[room.Scope()] = roomIds;
+                }
+            }
+            return roomMap;
         }
 
         private async Task<Package> Write(Package pkg, TimeSpan timeout)
