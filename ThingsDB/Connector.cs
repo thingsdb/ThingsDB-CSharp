@@ -372,22 +372,15 @@ namespace ThingsDB
         {
             try
             {
+               
                 RoomEvent roomEvent;
+                var bytes = pkg.Data();
+                var reader = new MessagePackReader(bytes);
 
-                switch (pkg.Tp())
-                {
-                    case PackageType.RoomJoin:
-                    case PackageType.RoomLeave:
-                    case PackageType.RoomDelete:
-                        roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(pkg.Data());
-                        break;
-                    case PackageType.RoomEmit:
-                        roomEvent = MessagePackSerializer.Deserialize<RoomEventEmit>(pkg.Data());
-                        break;
-                    default:
-                        throw new Exception("Invalid package type");
-                }
+                roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(bytes);
                 roomEvent.Tp = pkg.Tp();
+                roomEvent.SetArgs(bytes);
+                
                 if (roomLookup.TryGetValue(roomEvent.Id, out Room? room))
                 {
                     room.OnEvent(roomEvent);

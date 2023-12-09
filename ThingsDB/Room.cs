@@ -12,7 +12,7 @@ namespace ThingsDB
 
     abstract public class Room
     {
-        public delegate void OnEmitHandler(object[] args);
+        public delegate void OnEmitHandler(byte[] args);
 
         virtual public void OnInit() { }
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
@@ -20,7 +20,7 @@ namespace ThingsDB
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         virtual public void OnLeave() { }
         virtual public void OnDelete() { }
-        virtual public void OnEmit(string eventName, object[] args) { }
+        virtual public void OnEmit(string eventName, byte[] args) { }
 
         private ulong roomId;
         private bool isJoined;        
@@ -118,15 +118,14 @@ namespace ThingsDB
                     OnDelete();
                     break;
                 case PackageType.RoomEmit:
-                    var evEmit = (RoomEventEmit)ev;
 #pragma warning disable CS8604 // Possible null reference argument.
-                    if (onEmitHandlers.TryGetValue(evEmit.Event, out var handler))
+                    if (onEmitHandlers.TryGetValue(ev.Event, out var handler))
                     {
-                        handler.Invoke(evEmit.Args);
+                        handler.Invoke(ev.Args());
                     }
                     else
                     {
-                        OnEmit(evEmit.Event, evEmit.Args);
+                        OnEmit(ev.Event, ev.Args());
                     }
 #pragma warning restore CS8604 // Possible null reference argument.
                     break;                    

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MessagePack;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -22,6 +23,13 @@ namespace ThingsDB
             {
                 throw new TimeoutException("The operation has timed out.");
             }
+        }
+    }
+    public class Unpack
+    {
+        public static object[] Args(byte[] args)
+        {
+            return MessagePackSerializer.Deserialize<object[]>(args);
         }
     }
 }

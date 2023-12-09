@@ -25,9 +25,10 @@ namespace Tests
         }
 
         [Event("set-message")]
-        public void SetMessage(object[] args)
+        public void SetMessage(byte[] args)
         {
-            Msg = (string)args[0];
+            var oArgs = Unpack.Args(args);
+            Msg = (string)oArgs[0];
         }
     }
 
