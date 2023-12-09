@@ -7,6 +7,9 @@ using ThingsDB;
 
 namespace Tests
 {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8604 // Possible null reference argument.
+
     [MessagePackObject]
     public struct TestAB
     {
@@ -48,17 +51,15 @@ namespace Tests
         [Test]
         public async Task TestConnectAndAuthenticate()
         {
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
             await conn.Connect(token);
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Connect and authenticate success");
         }
 
         [Test]
         public async Task TestQuery()
         {
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
             await conn.Connect(token);
+
             var data = await conn.Query("1 + 2;");
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
@@ -81,14 +82,12 @@ namespace Tests
             data = await conn.Query("nil;");
             Assert.IsTrue(Unpack.IsNil(data));
 
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Query success");
         }
 
         [Test]
         public async Task TestErrQuery()
         {
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
             await conn.Connect(token);
 
             ZeroDivException? expectedException = null;
@@ -104,14 +103,12 @@ namespace Tests
             Assert.AreEqual("division or modulo by zero", expectedException.Msg);
             Assert.AreEqual(-58, expectedException.Code);
 
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Query with error success");
         }
 
         [Test]
         public async Task TestRun()
         {
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
             await conn.Connect(token);
             var args = new TestAB
             {
@@ -122,14 +119,12 @@ namespace Tests
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 42);
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Run success");
         }
 
         [Test]
         public async Task TestRoom()
         {
-#pragma warning disable CS8604 // Possible null reference argument.
             var myRoom = new MyRoom(conn);
             await conn.Connect(token);
             await myRoom.Join();
@@ -139,7 +134,6 @@ namespace Tests
             await Task.Delay(1000);
             Assert.AreEqual(myRoom.Msg, "test message");
 
-#pragma warning restore CS8604 // Possible null reference argument.
             Assert.Pass("Room success");
         }
 
@@ -152,4 +146,6 @@ namespace Tests
             }
         }
     }
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
 }
