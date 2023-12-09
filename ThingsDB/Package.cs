@@ -1,7 +1,7 @@
 ﻿using MessagePack;
 
 namespace ThingsDB
-{   
+{
     internal class Package
     {
         static public readonly int HeaderSize = 8;

@@ -1,55 +1,22 @@
 ﻿using MessagePack;
-using MessagePack.Formatters;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ThingsDB
 {
-    public class RoomEvent : RoomEventEmitFormatter
+    public class RoomEvent
     {
-        public PackageType Tp { get; set; }
+        public readonly PackageType Tp;
         public readonly ulong Id;
         public readonly string? Event;
-        private byte[] args;
-        private readonly long startPos;
-        private readonly long size;
+        public readonly byte[][] Args;
 
-        public RoomEvent(ulong roomId, string? eventName, long startPos, long size)
+        public RoomEvent(PackageType tp, byte[] bytes)
         {
-            Id = roomId;
-            Event = eventName;
-            args = new byte[size];
-            this.startPos = startPos;
-            this.size = size;
-        }
-
-        public byte[] Args() {  return args; }
-        public void SetArgs(byte[] bytes)
-        {
-            Array.Copy(bytes, startPos, args, 0, size);
-        }
-    }
-
-    public class RoomEventEmitFormatter : IMessagePackFormatter<RoomEvent>
-    {
-        public void Serialize(ref MessagePackWriter writer, RoomEvent value, MessagePackSerializerOptions options)
-        {
-            throw new NotImplementedException();
-        }
-
-        public RoomEvent Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
-        {
-            options.Security.DepthStep(ref reader);
-
+            var reader = new MessagePackReader(bytes);
             int count = reader.ReadMapHeader();
             ulong? roomId = null;
             string? eventName = null;
-            long start = 0;
-            long size = 0;
-           
+            Args = Array.Empty<byte[]>();
+
             for (int i = 0; i < count; i++)
             {
                 string? key = reader.ReadString();
@@ -63,19 +30,27 @@ namespace ThingsDB
                 }
                 else if (key == "args")
                 {
-                    start = reader.Consumed;
-                    reader.Skip();
-                    size = reader.Consumed - start;
+                    int numArguments = reader.ReadArrayHeader();
+                    Args = new byte[numArguments][];
+                    for (int j = 0; j < numArguments; j++)
+                    {
+                        long startPos = reader.Consumed;
+                        reader.Skip();
+                        long size = reader.Consumed - startPos;
+                        Args[j] = new byte[size];
+                        Array.Copy(bytes, startPos, Args[j], 0, size);
+                    }
                 }
             }
-            
-            reader.Depth--;
 
             if (roomId == null)
             {
                 throw new Exception("Failed to unpack emit event");
             }
-            return new RoomEvent((ulong)roomId, eventName, start, size);
+
+            Tp = tp;
+            Id = (ulong)roomId;
+            Event = eventName;
         }
     }
 }

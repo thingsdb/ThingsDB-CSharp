@@ -12,7 +12,7 @@ namespace ThingsDB
 
     abstract public class Room
     {
-        public delegate void OnEmitHandler(byte[] args);
+        public delegate void OnEmitHandler(byte[][] args);
 
         virtual public void OnInit() { }
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
@@ -20,10 +20,10 @@ namespace ThingsDB
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         virtual public void OnLeave() { }
         virtual public void OnDelete() { }
-        virtual public void OnEmit(string eventName, byte[] args) { }
+        virtual public void OnEmit(string eventName, byte[][] args) { }
 
         private ulong roomId;
-        private bool isJoined;        
+        private bool isJoined;
         private readonly string code;
         private readonly string scope;
         private readonly Connector conn;
@@ -41,12 +41,12 @@ namespace ThingsDB
             this.code = code;
             this.scope = scope;
             foreach (MethodInfo prop in GetType().GetMethods())
-            {                
+            {
                 foreach (Attribute attribute in prop.GetCustomAttributes(true))
                 {
                     if (attribute is Event ev)
                     {
-                        SetOnEmitHandler(ev.Name, (OnEmitHandler)Delegate.CreateDelegate(typeof(OnEmitHandler), this, prop));                    
+                        SetOnEmitHandler(ev.Name, (OnEmitHandler)Delegate.CreateDelegate(typeof(OnEmitHandler), this, prop));
                     }
                 }
             }
@@ -121,14 +121,14 @@ namespace ThingsDB
 #pragma warning disable CS8604 // Possible null reference argument.
                     if (onEmitHandlers.TryGetValue(ev.Event, out var handler))
                     {
-                        handler.Invoke(ev.Args());
+                        handler.Invoke(ev.Args);
                     }
                     else
                     {
-                        OnEmit(ev.Event, ev.Args());
+                        OnEmit(ev.Event, ev.Args);
                     }
 #pragma warning restore CS8604 // Possible null reference argument.
-                    break;                    
+                    break;
             }
         }
         private async Task HandleOnJoin()

@@ -1,6 +1,7 @@
 using MessagePack;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ThingsDB;
 
@@ -19,16 +20,15 @@ namespace Tests
     {
         public string? Msg;
 
-        public MyRoom(Connector conn) : base(conn, ".emitter.id();") 
+        public MyRoom(Connector conn) : base(conn, ".emitter.id();")
         {
             Msg = null;
         }
 
         [Event("set-message")]
-        public void SetMessage(byte[] args)
+        public void SetMessage(byte[][] args)
         {
-            var oArgs = Unpack.Args(args);
-            Msg = (string)oArgs[0];
+            Msg = Unpack.Deserialize<string>(args[0]);
         }
     }
 
@@ -63,15 +63,24 @@ namespace Tests
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 3);
+
             var args = new TestAB
             {
                 A = 3,
                 B = 4
             };
             data = await conn.Query("a + b;", args);
-            Assert.IsNotNull(data);
             intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 7);
+
+            var args2 = new Dictionary<string, int> { { "a", 6 }, { "b", 7 } };
+            data = await conn.Query("a * b;", args2);
+            intResult = Unpack.Deserialize<int>(data);  // Same as MessagePackSerializer.Deserialize
+            Assert.AreEqual(intResult, 42);
+
+            data = await conn.Query("nil;");
+            Assert.IsTrue(Unpack.IsNil(data));
+
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
             Assert.Pass("Query success");
         }
@@ -125,7 +134,7 @@ namespace Tests
             await conn.Connect(token);
             await myRoom.Join();
             await conn.Query(".emitter.emit('set-message', 'test message');");
-            
+
             // wait for one second so we have enough time to receive the emit
             await Task.Delay(1000);
             Assert.AreEqual(myRoom.Msg, "test message");

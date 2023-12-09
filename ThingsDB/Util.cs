@@ -1,9 +1,4 @@
 ﻿using MessagePack;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ThingsDB
 {
@@ -27,9 +22,13 @@ namespace ThingsDB
     }
     public class Unpack
     {
-        public static object[] Args(byte[] args)
+        public static T Deserialize<T>(byte[] bytes)
         {
-            return MessagePackSerializer.Deserialize<object[]>(args);
+            return MessagePackSerializer.Deserialize<T>(bytes);
+        }
+        public static bool IsNil(byte[] bytes)
+        {
+            return MessagePackSerializer.Deserialize<object>(bytes) == null;
         }
     }
 }

@@ -372,15 +372,8 @@ namespace ThingsDB
         {
             try
             {
-               
-                RoomEvent roomEvent;
-                var bytes = pkg.Data();
-                var reader = new MessagePackReader(bytes);
+                RoomEvent roomEvent = new(pkg.Tp(), pkg.Data());
 
-                roomEvent = MessagePackSerializer.Deserialize<RoomEvent>(bytes);
-                roomEvent.Tp = pkg.Tp();
-                roomEvent.SetArgs(bytes);
-                
                 if (roomLookup.TryGetValue(roomEvent.Id, out Room? room))
                 {
                     room.OnEvent(roomEvent);
@@ -391,7 +384,7 @@ namespace ThingsDB
                 }
             }
             catch (Exception ex)
-            {                
+            {
                 logStream?.WriteLine(ex.ToString());
             }
         }
@@ -449,7 +442,7 @@ namespace ThingsDB
                     int numBytesRead = await stream.ReadAsync(buffer.AsMemory(n, bufferSize - n));
                     if (numBytesRead < 0)
                     {
-                        throw new InvalidOperationException();
+                        throw new SocketException();
                     }
                     n += numBytesRead;
                     while (n > 0)
@@ -506,7 +499,7 @@ namespace ThingsDB
             }
             catch (Exception ex)
             {
-                if (logStream != null)
+                if (!closed && logStream != null)
                 {
                     logStream.WriteLine(ex.ToString());
                 }
