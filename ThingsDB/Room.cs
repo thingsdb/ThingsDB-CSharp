@@ -108,6 +108,11 @@ namespace ThingsDB
                 throw;
             }
         }
+        public async Task Leave()
+        {
+            ulong[] roomIds = new ulong[1] { roomId };
+            await conn.Leave(scope, roomIds);
+        }
         public async Task Emit(string eventName)
         {
             await Emit<string>(eventName, null);
