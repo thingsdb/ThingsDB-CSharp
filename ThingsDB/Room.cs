@@ -73,16 +73,21 @@ namespace ThingsDB
             isJoined = true;
             try
             {
-                if (roomId == 0)
+                if (code == "")
                 {
-                    if (code == "")
-                    {
-                        throw new EmptyCodeAndRoomId("Either a roomId or code to find the room Id must be given");
-                    }
+                    throw new EmptyCodeAndRoomId("Code is required to find the room Id");
+                }
 
-                    var result = await conn.Query(scope, code);
+                var result = await conn.Query(scope, code);
+                try
+                {
                     roomId = MessagePackSerializer.Deserialize<ulong>(result);
                 }
+                catch (Exception ex)
+                {
+                    throw new InvalidRoomCode("The result from the given code could not be deserialized as a room Id (type ulong).");
+                }
+
                 ulong[] roomIds = new ulong[1] { roomId };
                 var response = await conn.Join(scope, roomIds);
                 if (response[0] != roomId)
@@ -102,6 +107,14 @@ namespace ThingsDB
                 isJoined = false;
                 throw;
             }
+        }
+        public async Task Emit(string eventName)
+        {
+            await Emit<string>(eventName, null);
+        }
+        public async Task Emit<T>(string eventName, T[]? args)
+        {
+            await conn.Emit(this, eventName, args);
         }
         internal void OnEvent(RoomEvent ev)
         {

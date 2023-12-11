@@ -101,20 +101,20 @@ namespace ThingsDB
             return await Query<string>(scope, code, null, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string code, T? args)
+        public async Task<byte[]> Query<T>(string code, T? kwargs)
         {
-            return await Query(DefaultScope, code, args, DefaultTimeout);
+            return await Query(DefaultScope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T? args)
+        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs)
         {
-            return await Query(scope, code, args, DefaultTimeout);
+            return await Query(scope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T? args, TimeSpan timeout)
+        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs, TimeSpan timeout)
         {
             object[] query;
-            if (args == null)
+            if (kwargs == null)
             {
                 query = new object[2];
                 query[0] = scope;
@@ -125,7 +125,7 @@ namespace ThingsDB
                 query = new object[3];
                 query[0] = scope;
                 query[1] = code;
-                query[2] = args;
+                query[2] = kwargs;
             }
 
             byte[] data = MessagePackSerializer.Serialize(query);
@@ -155,26 +155,47 @@ namespace ThingsDB
         }
         public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs, TimeSpan timeout)
         {
-            object[] query;
+            object[] run;
             if (argsOrKwargs == null)
             {
-                query = new object[2];
-                query[0] = scope;
-                query[1] = procedure;
+                run = new object[2];
+                run[0] = scope;
+                run[1] = procedure;
             }
             else
             {
-                query = new object[3];
-                query[0] = scope;
-                query[1] = procedure;
-                query[2] = argsOrKwargs;
+                run = new object[3];
+                run[0] = scope;
+                run[1] = procedure;
+                run[2] = argsOrKwargs;
             }
 
-            byte[] data = MessagePackSerializer.Serialize(query);
+            byte[] data = MessagePackSerializer.Serialize(run);
             Package pkg = new(PackageType.ReqRun, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
             result.RaiseOnErr();
             return result.Data();
+        }
+        internal async Task Emit<T>(Room room, string eventName, T[]? args)
+        {
+            int n = args?.Length ?? 0;
+            object[] emit = new object[2 + n];
+            emit[0] = room.Scope();
+            emit[1] = room.Id();
+            emit[2] = eventName;
+            for (var i = 0; i < n; i++)
+            {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8601 // Possible null reference assignment.
+                emit[2 + i] = args[i];
+#pragma warning restore CS8601 // Possible null reference assignment.
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            }
+
+            byte[] data = MessagePackSerializer.Serialize(emit);
+            Package pkg = new(PackageType.ReqEmit, GetNextPid(), data);
+            Package result = await EnsureWrite(pkg, DefaultTimeout);
+            result.RaiseOnErr();
         }
 
         internal void SetRoom(Room room)

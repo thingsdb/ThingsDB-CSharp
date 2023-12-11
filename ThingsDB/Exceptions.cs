@@ -24,6 +24,7 @@
     public class RoomAlreadyJoined : RoomException { public RoomAlreadyJoined(string msg) : base(msg) { } }
     public class EmptyCodeAndRoomId : RoomException { public EmptyCodeAndRoomId(string msg) : base(msg) { } }
     public class RoomNotFound : RoomException { public RoomNotFound(string msg) : base(msg) { } }
+    public class InvalidRoomCode : RoomException { public InvalidRoomCode(string msg) : base(msg) { } }
 
     //
     // ThingsDB response exceptions.
