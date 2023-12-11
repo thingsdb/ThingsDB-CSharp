@@ -112,7 +112,7 @@ namespace ThingsDB
         {
             await Emit<string>(eventName, null);
         }
-        public async Task Emit<T>(string eventName, T[]? args)
+        public async Task Emit<T>(string eventName, params T[]? args)
         {
             await conn.Emit(this, eventName, args);
         }

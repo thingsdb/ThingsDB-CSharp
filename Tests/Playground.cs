@@ -128,11 +128,11 @@ namespace Tests
             var myRoom = new MyRoom(conn);
             await conn.Connect(token);
             await myRoom.Join();
-            await conn.Query(".emitter.emit('set-message', 'test message');");
+            await myRoom.Emit("set-message", "test message");
 
             // wait for one second so we have enough time to receive the emit
             await Task.Delay(1000);
-            Assert.AreEqual(myRoom.Msg, "test message");
+            Assert.AreEqual("test message", myRoom.Msg);
 
             Assert.Pass("Room success");
         }

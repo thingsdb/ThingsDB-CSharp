@@ -179,7 +179,7 @@ namespace ThingsDB
         internal async Task Emit<T>(Room room, string eventName, T[]? args)
         {
             int n = args?.Length ?? 0;
-            object[] emit = new object[2 + n];
+            object[] emit = new object[3 + n];
             emit[0] = room.Scope();
             emit[1] = room.Id();
             emit[2] = eventName;
@@ -187,7 +187,7 @@ namespace ThingsDB
             {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
 #pragma warning disable CS8601 // Possible null reference assignment.
-                emit[2 + i] = args[i];
+                emit[3 + i] = args[i];
 #pragma warning restore CS8601 // Possible null reference assignment.
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
             }
