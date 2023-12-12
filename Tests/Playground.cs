@@ -43,7 +43,7 @@ namespace Tests
         [SetUp]
         public void SetUp()
         {
-            conn = new("playground.thingsdb.net", 9400, true);
+            conn = new Connector("playground.thingsdb.net", 9400, true);
             conn.DefaultScope = "//Doc";
             conn.SetLogStream(Console.Out);
         }

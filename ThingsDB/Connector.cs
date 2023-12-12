@@ -111,12 +111,12 @@ namespace ThingsDB
             return await Query(DefaultScope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T kwargs)
+        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs)
         {
             return await Query(scope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T kwargs, TimeSpan timeout)
+        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs, TimeSpan timeout)
         {
             object[] query;
             if (kwargs == null)

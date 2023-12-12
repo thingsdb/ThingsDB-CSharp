@@ -86,7 +86,7 @@ namespace ThingsDB
                 {
                     roomId = MessagePackSerializer.Deserialize<ulong>(result);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     throw new InvalidRoomCode("The result from the given code could not be deserialized as a room Id (type ulong).");
                 }
