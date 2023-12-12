@@ -50,8 +50,8 @@ namespace ThingsDB
             autoReconnect = true;
             next_pid = 0;
             isReconnecting = false;
-            pkgLookup = new();
-            roomLookup = new();
+            pkgLookup = [];
+            roomLookup = [];
             client = new();
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
@@ -79,7 +79,7 @@ namespace ThingsDB
         public async Task Connect(string username, string password) { await Connect(username, password, DefaultTimeout); }
         public async Task Connect(string username, string password, TimeSpan timeout)
         {
-            auth = new string[2] { username, password };
+            auth = [username, password];
             await ConnectAttempt(timeout);
         }
 
@@ -293,8 +293,7 @@ namespace ThingsDB
                 }
                 else
                 {
-                    roomIds = new();
-                    roomIds.Add(room.Id());
+                    roomIds = [room.Id()];
                     roomMap[room.Scope()] = roomIds;
                 }
             }
@@ -430,9 +429,9 @@ namespace ThingsDB
                 {
                     room.OnEvent(roomEvent);
                 }
-                else if (logStream != null)
+                else
                 {
-                    logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                    logStream?.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
                 }
             }
             catch (Exception ex)
@@ -532,9 +531,9 @@ namespace ThingsDB
                                     {
                                         promise.SetResult(pkg);
                                     }
-                                    else if (logStream != null)
+                                    else
                                     {
-                                        logStream.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
+                                        logStream?.WriteLine(string.Format("No promise found for PID {0}", pkg.Pid()));
                                     }
                                     break;
                             }

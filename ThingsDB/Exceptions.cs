@@ -20,11 +20,11 @@
     //
     // Room exceptions.
     //
-    public class RoomException : Exception { public RoomException(string msg) : base(msg) { } }
-    public class RoomAlreadyJoined : RoomException { public RoomAlreadyJoined(string msg) : base(msg) { } }
-    public class EmptyCodeAndRoomId : RoomException { public EmptyCodeAndRoomId(string msg) : base(msg) { } }
-    public class RoomNotFound : RoomException { public RoomNotFound(string msg) : base(msg) { } }
-    public class InvalidRoomCode : RoomException { public InvalidRoomCode(string msg) : base(msg) { } }
+    public class RoomException(string msg) : Exception(msg) { }
+    public class RoomAlreadyJoined(string msg) : RoomException(msg) { }
+    public class EmptyCodeAndRoomId(string msg) : RoomException(msg) { }
+    public class RoomNotFound(string msg) : RoomException(msg) { }
+    public class InvalidRoomCode(string msg) : RoomException(msg) { }
 
     //
     // ThingsDB response exceptions.
@@ -33,43 +33,37 @@
     // always inclused an `error_msg` and an `error_code`.
     //
     [Serializable]
-    public class TiResponseException : Exception
+    public class TiResponseException(string msg, int code) : Exception(msg)
     {
-        public readonly string Msg;
-        public readonly int Code;
-
-        public TiResponseException(string msg, int code) : base(msg)
-        {
-            Msg = msg;
-            Code = code;
-        }
+        public readonly string Msg = msg;
+        public readonly int Code = code;
     }
     // custom error
-    public class TiError : TiResponseException { public TiError(string msg, int code) : base(msg, code) { } }               // ...
+    public class TiError(string msg, int code) : TiResponseException(msg, code) { }                 // ...
 
     // build-in errors
-    public class CancelledException : TiResponseException { public CancelledException(string msg, int code) : base(msg, code) { } }         // -64
-    public class OperationException : TiResponseException { public OperationException(string msg, int code) : base(msg, code) { } }         // -63
-    public class NumArgumentsException : TiResponseException { public NumArgumentsException(string msg, int code) : base(msg, code) { } }   // -62
-    public class TypeError : TiResponseException { public TypeError(string msg, int code) : base(msg, code) { } }                           // -61
-    public class ValueError : TiResponseException { public ValueError(string msg, int code) : base(msg, code) { } }                         // -60
-    public class OverflowException : TiResponseException { public OverflowException(string msg, int code) : base(msg, code) { } }           // -59
-    public class ZeroDivException : TiResponseException { public ZeroDivException(string msg, int code) : base(msg, code) { } }             // -58
-    public class MaxQuotaException : TiResponseException { public MaxQuotaException(string msg, int code) : base(msg, code) { } }           // -57
-    public class AuthError : TiResponseException { public AuthError(string msg, int code) : base(msg, code) { } }                           // -56
-    public class ForbiddenException : TiResponseException { public ForbiddenException(string msg, int code) : base(msg, code) { } }         // -55
-    public class LookupError : TiResponseException { public LookupError(string msg, int code) : base(msg, code) { } }                       // -54
-    public class BadDataException : TiResponseException { public BadDataException(string msg, int code) : base(msg, code) { } }             // -53
-    public class SyntaxError : TiResponseException { public SyntaxError(string msg, int code) : base(msg, code) { } }                       // -52
-    public class NodeError : TiResponseException { public NodeError(string msg, int code) : base(msg, code) { } }                           // -51
-    public class AssertError : TiResponseException { public AssertError(string msg, int code) : base(msg, code) { } }                       // -50
+    public class CancelledException(string msg, int code) : TiResponseException(msg, code) { }      // -64
+    public class OperationException(string msg, int code) : TiResponseException(msg, code) { }      // -63
+    public class NumArgumentsException(string msg, int code) : TiResponseException(msg, code) { }   // -62
+    public class TypeError(string msg, int code) : TiResponseException(msg, code) { }               // -61
+    public class ValueError(string msg, int code) : TiResponseException(msg, code) { }              // -60
+    public class OverflowException(string msg, int code) : TiResponseException(msg, code) { }       // -59
+    public class ZeroDivException(string msg, int code) : TiResponseException(msg, code) { }        // -58
+    public class MaxQuotaException(string msg, int code) : TiResponseException(msg, code) { }       // -57
+    public class AuthError(string msg, int code) : TiResponseException(msg, code) { }               // -56
+    public class ForbiddenException(string msg, int code) : TiResponseException(msg, code) { }      // -55
+    public class LookupError(string msg, int code) : TiResponseException(msg, code) { }             // -54
+    public class BadDataException(string msg, int code) : TiResponseException(msg, code) { }        // -53
+    public class SyntaxError(string msg, int code) : TiResponseException(msg, code) { }             // -52
+    public class NodeError(string msg, int code) : TiResponseException(msg, code) { }               // -51
+    public class AssertError(string msg, int code) : TiResponseException(msg, code) { }             // -50
 
     // internal errors
-    public class ResultTooLarge : TiResponseException { public ResultTooLarge(string msg, int code) : base(msg, code) { } }                 // -6
-    public class RequestTimeout : TiResponseException { public RequestTimeout(string msg, int code) : base(msg, code) { } }                 // -5
-    public class RequestCancel : TiResponseException { public RequestCancel(string msg, int code) : base(msg, code) { } }                   // -4
-    public class WriteUVException : TiResponseException { public WriteUVException(string msg, int code) : base(msg, code) { } }             // -3
-    public class MemoryException : TiResponseException { public MemoryException(string msg, int code) : base(msg, code) { } }               // -2
-    public class InternalException : TiResponseException { public InternalException(string msg, int code) : base(msg, code) { } }           // -1
-    public class SuccessException : TiResponseException { public SuccessException(string msg, int code) : base(msg, code) { } }             // 0
+    public class ResultTooLarge(string msg, int code) : TiResponseException(msg, code) { }          // -6
+    public class RequestTimeout(string msg, int code) : TiResponseException(msg, code) { }          // -5
+    public class RequestCancel(string msg, int code) : TiResponseException(msg, code) { }           // -4
+    public class WriteUVException(string msg, int code) : TiResponseException(msg, code) { }        // -3
+    public class MemoryException(string msg, int code) : TiResponseException(msg, code) { }         // -2
+    public class InternalException(string msg, int code) : TiResponseException(msg, code) { }       // -1
+    public class SuccessException(string msg, int code) : TiResponseException(msg, code) { }        // 0
 }

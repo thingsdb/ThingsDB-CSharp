@@ -15,7 +15,7 @@ namespace ThingsDB
             int count = reader.ReadMapHeader();
             ulong? roomId = null;
             string? eventName = null;
-            Args = Array.Empty<byte[]>();
+            Args = [];
 
             for (int i = 0; i < count; i++)
             {

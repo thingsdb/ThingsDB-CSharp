@@ -35,7 +35,7 @@ namespace ThingsDB
         {
             roomId = 0;
             isJoined = false;
-            onEmitHandlers = new();
+            onEmitHandlers = [];
             joinPromise = null;
             this.conn = conn;
             this.code = code;
