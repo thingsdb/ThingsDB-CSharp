@@ -14,6 +14,7 @@ namespace ThingsDB
 
         private static readonly int maxWaitTimeRecoonect = 120000;  // in milliseconds
         private static readonly int bufferSize = 8192;
+        private static readonly int defaultPort = 9200;
         private readonly string host;
         private readonly int port;
         private string[]? auth;
@@ -29,9 +30,9 @@ namespace ThingsDB
         private ushort next_pid;
         private TextWriter? logStream;
 
-        public Connector(string host) : this(host, 9000, false) { }
+        public Connector(string host) : this(host, defaultPort, false) { }
         public Connector(string host, int port) : this(host, port, false) { }
-        public Connector(string host, bool useSsl) : this(host, 9000, useSsl) { }
+        public Connector(string host, bool useSsl) : this(host, defaultPort, useSsl) { }
         public Connector(string host, int port, bool useSsl)
         {
             DefaultScope = "/thingsdb";
