@@ -1,8 +1,12 @@
 ﻿using MessagePack;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Threading.Tasks;
 
 namespace ThingsDB
 {
@@ -50,9 +54,9 @@ namespace ThingsDB
             autoReconnect = true;
             next_pid = 0;
             isReconnecting = false;
-            pkgLookup = new();
-            roomLookup = new();
-            client = new();
+            pkgLookup = new Dictionary<int, TaskCompletionSource<Package>>();
+            roomLookup = new Dictionary<ulong, Room>();
+            client = new TcpClient();
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
@@ -102,17 +106,17 @@ namespace ThingsDB
             return await Query<string>(scope, code, null, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string code, T? kwargs)
+        public async Task<byte[]> Query<T>(string code, T kwargs)
         {
             return await Query(DefaultScope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs)
+        public async Task<byte[]> Query<T>(string scope, string code, T kwargs)
         {
             return await Query(scope, code, kwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Query<T>(string scope, string code, T? kwargs, TimeSpan timeout)
+        public async Task<byte[]> Query<T>(string scope, string code, T kwargs, TimeSpan timeout)
         {
             object[] query;
             if (kwargs == null)
@@ -130,7 +134,7 @@ namespace ThingsDB
             }
 
             byte[] data = MessagePackSerializer.Serialize(query);
-            Package pkg = new(PackageType.ReqQuery, GetNextPid(), data);
+            Package pkg = new Package(PackageType.ReqQuery, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
             result.RaiseOnErr();
             return result.Data();
@@ -145,16 +149,16 @@ namespace ThingsDB
             return await Run<string>(scope, procedure, null, DefaultTimeout);
         }
 
-        public async Task<byte[]> Run<T>(string procedure, T? argsOrKwargs)
+        public async Task<byte[]> Run<T>(string procedure, T argsOrKwargs)
         {
             return await Run(DefaultScope, procedure, argsOrKwargs, DefaultTimeout);
         }
 
-        public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs)
+        public async Task<byte[]> Run<T>(string scope, string procedure, T argsOrKwargs)
         {
             return await Run(scope, procedure, argsOrKwargs, DefaultTimeout);
         }
-        public async Task<byte[]> Run<T>(string scope, string procedure, T? argsOrKwargs, TimeSpan timeout)
+        public async Task<byte[]> Run<T>(string scope, string procedure, T argsOrKwargs, TimeSpan timeout)
         {
             object[] run;
             if (argsOrKwargs == null)
@@ -172,7 +176,7 @@ namespace ThingsDB
             }
 
             byte[] data = MessagePackSerializer.Serialize(run);
-            Package pkg = new(PackageType.ReqRun, GetNextPid(), data);
+            Package pkg = new Package(PackageType.ReqRun, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, timeout);
             result.RaiseOnErr();
             return result.Data();
@@ -194,7 +198,7 @@ namespace ThingsDB
             }
 
             byte[] data = MessagePackSerializer.Serialize(emit);
-            Package pkg = new(PackageType.ReqEmit, GetNextPid(), data);
+            Package pkg = new Package(PackageType.ReqEmit, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, DefaultTimeout);
             result.RaiseOnErr();
         }
@@ -222,7 +226,7 @@ namespace ThingsDB
             Array.Copy(roomIds, 0, query, 1, roomIds.Length);
 
             byte[] data = MessagePackSerializer.Serialize(query);
-            Package pkg = new(tp, GetNextPid(), data);
+            Package pkg = new Package(tp, GetNextPid(), data);
             Package result = await EnsureWrite(pkg, DefaultTimeout);
             result.RaiseOnErr();
             var response = MessagePackSerializer.Deserialize<ulong?[]>(result.Data());
@@ -241,15 +245,15 @@ namespace ThingsDB
             if (token != null)
             {
                 byte[] data = MessagePackSerializer.Serialize(token);
-                pkg = new(PackageType.ReqAuth, GetNextPid(), data);
+                pkg = new Package(PackageType.ReqAuth, GetNextPid(), data);
             }
             else
             {
                 byte[] data = MessagePackSerializer.Serialize(auth);
-                pkg = new(PackageType.ReqAuth, GetNextPid(), data);
+                pkg = new Package(PackageType.ReqAuth, GetNextPid(), data);
             }
 
-            if (stream == null)
+            if (stream is null)
             {
                 await client.ConnectAsync(host, port);
                 if (useSsl)
@@ -293,7 +297,7 @@ namespace ThingsDB
                 }
                 else
                 {
-                    roomIds = new();
+                    roomIds = new List<ulong>();
                     roomIds.Add(room.Id());
                     roomMap[room.Scope()] = roomIds;
                 }
@@ -304,7 +308,7 @@ namespace ThingsDB
         private async Task<Package> Write(Package pkg, TimeSpan timeout)
         {
             Package result;
-            TaskCompletionSource<Package> promise = new();
+            TaskCompletionSource<Package> promise = new TaskCompletionSource<Package>();
 
             if (pkgLookup.TryGetValue(pkg.Pid(), out TaskCompletionSource<Package>? prev))
             {
@@ -334,7 +338,7 @@ namespace ThingsDB
         private async Task<Package> EnsureWrite(Package pkg, TimeSpan timeout)
         {
             int wait = 250;  // start with 250 milliseconds
-            Stopwatch sw = new();
+            Stopwatch sw = new Stopwatch();
             sw.Start();
             try
             {
@@ -424,7 +428,7 @@ namespace ThingsDB
         {
             try
             {
-                RoomEvent roomEvent = new(pkg.Tp(), pkg.Data());
+                RoomEvent roomEvent = new RoomEvent(pkg.Tp(), pkg.Data());
 
                 if (roomLookup.TryGetValue(roomEvent.Id, out Room? room))
                 {
@@ -506,7 +510,7 @@ namespace ThingsDB
                             {
                                 break;
                             }
-                            pkg = new(buffer);
+                            pkg = new Package(buffer);
                             offset = Package.HeaderSize;
                         }
 

@@ -1,4 +1,6 @@
-﻿namespace ThingsDB
+﻿using System;
+
+namespace ThingsDB
 {
     //
     // Exceptions used by the connector.

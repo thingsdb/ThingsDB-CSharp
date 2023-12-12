@@ -1,5 +1,8 @@
 ﻿using MessagePack;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace ThingsDB
 {
@@ -35,7 +38,7 @@ namespace ThingsDB
         {
             roomId = 0;
             isJoined = false;
-            onEmitHandlers = new();
+            onEmitHandlers = new Dictionary<string, OnEmitHandler>();
             joinPromise = null;
             this.conn = conn;
             this.code = code;
@@ -63,7 +66,7 @@ namespace ThingsDB
         {
             if (wait.Seconds > 0)
             {
-                joinPromise = new();
+                joinPromise = new TaskCompletionSource<int>();
             }
 
             if (isJoined)
