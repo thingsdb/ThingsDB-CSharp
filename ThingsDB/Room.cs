@@ -83,12 +83,12 @@ namespace ThingsDB
                 {
                     roomId = MessagePackSerializer.Deserialize<ulong>(result);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     throw new InvalidRoomCode("The result from the given code could not be deserialized as a room Id (type ulong).");
                 }
 
-                ulong[] roomIds = new ulong[1] { roomId };
+                ulong[] roomIds = [roomId];
                 var response = await conn.Join(scope, roomIds);
                 if (response[0] != roomId)
                 {
@@ -110,7 +110,7 @@ namespace ThingsDB
         }
         public async Task Leave()
         {
-            ulong[] roomIds = new ulong[1] { roomId };
+            ulong[] roomIds = [roomId];
             await conn.Leave(scope, roomIds);
         }
         public async Task Emit(string eventName)
