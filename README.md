@@ -31,11 +31,63 @@
 
 ## Installation
 
-...
+This library is distributed via NuGet.
+
+```
+Install-Package ThingsDB
+```
 
 ## Quick usage
 
-```c#
+```csharp
+// Create a new connector instance
+Connector conn = new("playground.thingsdb.net", 9400, true)
+{
+  DefaultScope = "//Doc";
+};
+// Optionally, configure a stream for logging
+conn.SetLogStream(Console.Out);
 
+// Make the connection
+await conn.Connect(token);  // You need either a token or a username + password
+
+// Perform a query
+var data = await conn.Query(@"
+    'Hello world!';
+");
+// The result is returned in bytes and can be deserialized using MessagePack.
+var msg = MessagePackSerializer.Deserialize<string>(data);
+
+Console.WriteLine(msg);  // Hello world!
 ```
+
+## Connector
+
+To interact with ThingsDB using this library, you'll always require a
+Connector instance. Even when employing a Room to monitor events, you must
+first attach the Room to a Connector before it can function.
+
+The Connector is designed to handle asynchronous operations and is not
+thread-safe. While we anticipate providing a thread-safe Connector in the
+future, for the time being, each thread must be furnished with its own
+Connector instance.
+
+
+### Constructor
+```csharp
+Connector(string host, int port, bool useSsl)
+```
+
+- *host (string, required)*:
+    A hostname, IP address, FQDN to connect to.
+- *useSsl (bool)*:
+    Enable for creating a secure connection using SSL/TLS.
+- *port (int)*:
+    TCP port to connect to. The default port is `9200`.
+
+### Close
+```csharp
+void Close()
+```
+Closed an open connection. Usually called once when the application is closed.
 

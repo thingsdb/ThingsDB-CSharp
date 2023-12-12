@@ -4,13 +4,14 @@
     <id>ThingsDB.Connector</id>
     <version>1.0.0</version>
     <authors>joente</authors>
-    <license type="file">LICENSE</license>
-    <icon>icon.png</icon>
+    <license type="file">LICENSE.txt</license>
+    <icon>logo.png</icon>
     <projectUrl>https://github.com/thingsdb/ThingsDB-CSharp/</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Async connector for communicating with ThingsDB including romm support.</description>
     <releaseNotes>Initial release.</releaseNotes>
     <copyright>Copyright ©2023 Cesbit</copyright>
+    <readme>README.md</readme>
     <tags>thingsdb database programming connector</tags>
     <dependencies>
       <dependency id="MessagePack" version="2.5.108" />
@@ -18,7 +19,7 @@
   </metadata>
     <files>
         <file src="README.md" target="" />
-        <file src="icon.png" target="" />
-        <file src="LICENSE" target="" />
+        <file src="logo.png" target="" />
+        <file src="LICENSE.txt" target="" />
     </files>
 </package>
