@@ -19,14 +19,9 @@ namespace Tests
         public int B;
     }
 
-    public class MyRoom : Room
+    public class MyRoom(Connector conn) : Room(conn, ".emitter.id();")
     {
-        public string? Msg;
-
-        public MyRoom(Connector conn) : base(conn, ".emitter.id();")
-        {
-            Msg = null;
-        }
+        public string? Msg = null;
 
         [Event("set-message")]
         public void SetMessage(byte[][] args)
@@ -43,8 +38,10 @@ namespace Tests
         [SetUp]
         public void SetUp()
         {
-            conn = new("playground.thingsdb.net", 9400, true);
-            conn.DefaultScope = "//Doc";
+            conn = new("playground.thingsdb.net", 9400, true)
+            {
+                DefaultScope = "//Doc"
+            };
             conn.SetLogStream(Console.Out);
         }
 
@@ -140,10 +137,7 @@ namespace Tests
         [TearDown]
         public void TearDown()
         {
-            if (conn != null)
-            {
-                conn.Close();
-            }
+            conn?.Close();
         }
     }
 #pragma warning restore CS8604 // Possible null reference argument.
