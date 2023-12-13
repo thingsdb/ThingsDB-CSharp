@@ -44,7 +44,7 @@
 This library is distributed via NuGet.
 
 ```
-Install-Package ThingsDB
+Install-Package ThingsDB.Connector
 ```
 
 ## Quick usage
