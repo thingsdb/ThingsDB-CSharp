@@ -245,7 +245,7 @@ using ThingsDB;
 //       If you beforehand know the Id, you can simple create a string with the
 //       room Id in it. For example: "123".
 //  Optionally, you may provide a scope for the room. If not given, the default
-//  scope of the collector will be used. For example:
+//  scope of the connector will be used. For example:
 //    Room(conn, "//my_scope", ".my_room.id()")
 public class MyRoom(Connector conn) : Room(conn, ".roomd();")
 {
