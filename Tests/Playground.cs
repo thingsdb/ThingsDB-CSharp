@@ -29,9 +29,10 @@ namespace Tests
             Msg = Unpack.Deserialize<string>(args[0]);
         }
 
-        public override void OnLeave()
+        public override async Task OnJoin()
         {
-            base.OnLeave();
+            var response = await Conn.Query(".test_msg;");
+            Msg = Unpack.Deserialize<string>(response);
         }
     }
 
@@ -138,7 +139,11 @@ namespace Tests
         {
             var myRoom = new MyRoom(conn);
             await conn.Connect(token);
+
+            Assert.IsNull(myRoom.Msg);
             await myRoom.Join();
+            Assert.AreEqual("Used for Connector testing", myRoom.Msg);
+
             await myRoom.Emit("set-message", "test message");
 
             // wait for one second so we have enough time to receive the emit

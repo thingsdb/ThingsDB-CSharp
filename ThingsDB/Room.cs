@@ -4,10 +4,9 @@ using System.Reflection;
 namespace ThingsDB
 {
     [AttributeUsage(AttributeTargets.Method)]
-    public class Event : Attribute
+    public class Event(string eventName) : Attribute
     {
-        internal string Name { get; set; }
-        public Event(string eventName) { Name = eventName; }
+        internal string Name { get; set; } = eventName;
     }
 
     abstract public class Room
@@ -21,15 +20,13 @@ namespace ThingsDB
         virtual public void OnLeave() { }
         virtual public void OnDelete() { }
         virtual public void OnEmit(string eventName, byte[][] args) { }
-
+        public readonly Connector Conn;
         private ulong roomId;
         private bool isJoined;
         private readonly string code;
         private readonly string scope;
-        private readonly Connector conn;
         private readonly Dictionary<string, OnEmitHandler> onEmitHandlers;
         private TaskCompletionSource<int>? joinPromise;
-
 
         [MessagePackObject]
         private struct TestRoomId
@@ -45,7 +42,7 @@ namespace ThingsDB
             isJoined = false;
             onEmitHandlers = [];
             joinPromise = null;
-            this.conn = conn;
+            Conn = conn;
             this.code = code;
             this.scope = scope;
             foreach (MethodInfo prop in GetType().GetMethods())
@@ -64,7 +61,7 @@ namespace ThingsDB
         public async Task Join() { await Join(TimeSpan.FromSeconds(60.0)); }
         public async Task Join(TimeSpan wait)
         {
-            if (wait.Seconds > 0)
+            if (wait.TotalSeconds > 0)
             {
                 joinPromise = new();
             }
@@ -78,12 +75,12 @@ namespace ThingsDB
             {
                 await GetRoomId();
                 ulong[] roomIds = [roomId];
-                var response = await conn.Join(scope, roomIds);
+                var response = await Conn.Join(scope, roomIds);
                 if (response[0] != roomId)
                 {
                     throw new RoomNotFound(string.Format("Room with Id {0} not found", roomId));
                 }
-                conn.SetRoom(this);
+                Conn.SetRoom(this);
                 OnInit();
                 if (joinPromise != null)
                 {
@@ -104,7 +101,7 @@ namespace ThingsDB
             {
                 RoomId = roomId,
             };
-            var result = await conn.Query(scope, @"//ti
+            var result = await Conn.Query(scope, @"//ti
                 !is_err(try(room(room_id)));
             ", testRoomId);
             var isRoom = MessagePackSerializer.Deserialize<bool>(result);
@@ -117,7 +114,7 @@ namespace ThingsDB
         public async Task Leave()
         {
             ulong[] roomIds = [roomId];
-            await conn.Leave(scope, roomIds);
+            await Conn.Leave(scope, roomIds);
         }
         public async Task Emit(string eventName)
         {
@@ -125,7 +122,7 @@ namespace ThingsDB
         }
         public async Task Emit<T>(string eventName, params T[]? args)
         {
-            await conn.Emit(this, eventName, args);
+            await Conn.Emit(this, eventName, args);
         }
         internal void OnEvent(RoomEvent ev)
         {
@@ -135,11 +132,11 @@ namespace ThingsDB
                     _ = HandleOnJoin();
                     break;
                 case PackageType.RoomLeave:
-                    conn.UnsetRoom(this);
+                    Conn.UnsetRoom(this);
                     OnLeave();
                     break;
                 case PackageType.RoomDelete:
-                    conn.UnsetRoom(this);
+                    Conn.UnsetRoom(this);
                     OnDelete();
                     break;
                 case PackageType.RoomEmit:
@@ -168,7 +165,7 @@ namespace ThingsDB
                 throw new EmptyCodeAndRoomId("Code is required to find the room Id");
             }
 
-            var result = await conn.Query(scope, code);
+            var result = await Conn.Query(scope, code);
             try
             {
                 roomId = MessagePackSerializer.Deserialize<ulong>(result);
@@ -182,6 +179,5 @@ namespace ThingsDB
         {
             onEmitHandlers[eventName] = handler;
         }
-
     }
 }

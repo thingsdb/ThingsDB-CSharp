@@ -294,8 +294,8 @@ public override Task OnJoin()
 ```csharp
 public override void OnEmit(string eventName, byte[][] args)
 {
-    // This method will only be called if no event handler exists for when an
-    // event is received and accepts two arguments:
+    // Called when no event handler is configured for the event and must accept
+    // the following two arguments:
     //  * string eventName
     //      Contains the name for the event.
     //  * byte[][] args
