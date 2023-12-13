@@ -43,8 +43,14 @@
 
 This library is distributed via NuGet.
 
+Using a package manager:
 ```
 Install-Package ThingsDB.Connector
+```
+
+Or, by using NET CLI:
+```
+dotnet add package ThingsDB.Connector
 ```
 
 ## Quick usage
