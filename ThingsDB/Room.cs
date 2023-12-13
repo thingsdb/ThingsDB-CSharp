@@ -30,6 +30,14 @@ namespace ThingsDB
         private readonly Dictionary<string, OnEmitHandler> onEmitHandlers;
         private TaskCompletionSource<int>? joinPromise;
 
+
+        [MessagePackObject]
+        private struct TestRoomId
+        {
+            [Key("room_id")]
+            public ulong RoomId;
+        }
+
         public Room(Connector conn, string code) : this(conn, conn.DefaultScope, code) { }
         public Room(Connector conn, string scope, string code)
         {
@@ -53,11 +61,6 @@ namespace ThingsDB
         }
         public ulong Id() { return roomId; }
         public string Scope() { return scope; }
-        public void SetOnEmitHandler(string eventName, OnEmitHandler handler)
-        {
-            onEmitHandlers[eventName] = handler;
-        }
-
         public async Task Join() { await Join(TimeSpan.FromSeconds(60.0)); }
         public async Task Join(TimeSpan wait)
         {
@@ -73,21 +76,7 @@ namespace ThingsDB
             isJoined = true;
             try
             {
-                if (code == "")
-                {
-                    throw new EmptyCodeAndRoomId("Code is required to find the room Id");
-                }
-
-                var result = await conn.Query(scope, code);
-                try
-                {
-                    roomId = MessagePackSerializer.Deserialize<ulong>(result);
-                }
-                catch (Exception)
-                {
-                    throw new InvalidRoomCode("The result from the given code could not be deserialized as a room Id (type ulong).");
-                }
-
+                await GetRoomId();
                 ulong[] roomIds = [roomId];
                 var response = await conn.Join(scope, roomIds);
                 if (response[0] != roomId)
@@ -108,6 +97,23 @@ namespace ThingsDB
                 throw;
             }
         }
+        public async Task NoJoin()
+        {
+            await GetRoomId();
+            TestRoomId testRoomId = new()
+            {
+                RoomId = roomId,
+            };
+            var result = await conn.Query(scope, @"//ti
+                !is_err(try(room(room_id)));
+            ", testRoomId);
+            var isRoom = MessagePackSerializer.Deserialize<bool>(result);
+            if (!isRoom)
+            {
+                throw new RoomNotFound(string.Format("Room with Id {0} not found", roomId));
+            }
+        }
+
         public async Task Leave()
         {
             ulong[] roomIds = [roomId];
@@ -155,5 +161,27 @@ namespace ThingsDB
             await OnJoin();
             joinPromise?.SetResult(1);
         }
+        private async Task GetRoomId()
+        {
+            if (code == "")
+            {
+                throw new EmptyCodeAndRoomId("Code is required to find the room Id");
+            }
+
+            var result = await conn.Query(scope, code);
+            try
+            {
+                roomId = MessagePackSerializer.Deserialize<ulong>(result);
+            }
+            catch (Exception)
+            {
+                throw new InvalidRoomCode("The result from the given code could not be deserialized as a room Id (type ulong).");
+            }
+        }
+        private void SetOnEmitHandler(string eventName, OnEmitHandler handler)
+        {
+            onEmitHandlers[eventName] = handler;
+        }
+
     }
 }

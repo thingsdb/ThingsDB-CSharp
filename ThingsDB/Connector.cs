@@ -32,7 +32,6 @@ namespace ThingsDB
 
         public Connector(string host) : this(host, defaultPort, false) { }
         public Connector(string host, int port) : this(host, port, false) { }
-        public Connector(string host, bool useSsl) : this(host, defaultPort, useSsl) { }
         public Connector(string host, int port, bool useSsl)
         {
             DefaultScope = "/thingsdb";

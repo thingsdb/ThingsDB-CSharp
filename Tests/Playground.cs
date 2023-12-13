@@ -24,9 +24,14 @@ namespace Tests
         public string? Msg = null;
 
         [Event("set-message")]
-        public void SetMessage(byte[][] args)
+        public void OnSetMessage(byte[][] args)
         {
             Msg = Unpack.Deserialize<string>(args[0]);
+        }
+
+        public override void OnLeave()
+        {
+            base.OnLeave();
         }
     }
 
@@ -57,7 +62,9 @@ namespace Tests
         {
             await conn.Connect(token);
 
-            var data = await conn.Query("1 + 2;");
+            var data = await conn.Query(@"
+                1 + 2;
+            ");
             Assert.IsNotNull(data);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 3);
@@ -67,7 +74,9 @@ namespace Tests
                 A = 3,
                 B = 4
             };
-            data = await conn.Query("a + b;", args);
+            data = await conn.Query(@"
+                a + b;
+            ", args);
             intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 7);
 
@@ -107,15 +116,20 @@ namespace Tests
         public async Task TestRun()
         {
             await conn.Connect(token);
-            var args = new TestAB
+            var kwargs = new TestAB
             {
                 A = 6,
                 B = 7
             };
-            var data = await conn.Run("multiply", args);
-            Assert.IsNotNull(data);
+            var data = await conn.Run("multiply", kwargs);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
             Assert.AreEqual(intResult, 42);
+
+            int[] args = [4, 5];
+            data = await conn.Run("multiply", args);
+            intResult = MessagePackSerializer.Deserialize<int>(data);
+            Assert.AreEqual(intResult, 20);
+
             Assert.Pass("Run success");
         }
 
