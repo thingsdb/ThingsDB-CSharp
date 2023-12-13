@@ -26,12 +26,16 @@
       * [OnEmit](#onemit)
       * [OnLeave](#onleave)
       * [OnDelete](#ondelete)
+    * [Conn](#conn)
     * [Id](#id)
     * [Scope](#scope)
     * [Join](#join)
     * [NoJoin](#nojoin)
     * [Emit](#emit)
     * [Leave](#leave)
+  * [Unpack](#unpack)
+    * [Deserialize](#deserialize)
+    * [IsNil](#isnil)
 
 ---------------------------------------
 
@@ -325,6 +329,14 @@ public override void OnDelete()
 }
 ```
 
+### Conn
+```csharp
+Connector Conn;
+```
+
+Exposes the ThingsDB Connector which is bound to the room.
+
+
 ### Id
 ```csharp
 ulong Id();
@@ -386,3 +398,20 @@ public async Task Leave();
 ```
 
 No longer listen to events for this room.
+
+## Unpack
+Unpack utilities for deserializing data.
+
+### Deserialize
+```csharp
+Unpack.Deserialize<T>(response) -> T
+```
+
+This is like an alias for the `MessagePack.Deserialize` method.
+
+### IsNil
+```csharp
+Unpack.IsNil(response) -> bool
+```
+
+Easy way to check if a response is equal to `nil`.
