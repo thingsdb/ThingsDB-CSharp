@@ -15,7 +15,7 @@
     * [DefaultTimeout](#defaulttimeout)
     * [OnNodeStatus](#onnodestatus)
     * [SetAutoReconnect](#setautoreconnect)
-    * [IsAutoReconnect](#is-autoreconnect)
+    * [IsAutoReconnect](#isautoreconnect)
     * [SetLogStream](#setlogstream)
     * [Query](#query)
     * [Run](#run)
@@ -97,7 +97,7 @@ Connector(string host, int port, bool useSsl);
 ### Close
 
 ```csharp
-void Close()
+void Close();
 ```
 
 Closed an open connection. Usually called once when the application is closed.
