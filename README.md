@@ -249,12 +249,11 @@ using ThingsDB;
 //    Room(conn, "//my_scope", ".my_room.id()")
 public class MyRoom(Connector conn) : Room(conn, ".roomd();")
 {
-    public string? Msg = null;
-
     [Event("new-message")]
     public void OnNewMessage(byte[][] args)
     {
-        Msg = Unpack.Deserialize<string>(args[0]);
+        var msg = Unpack.Deserialize<string>(args[0]);
+        Console.WriteLine(msg);
     }
 }
 ```
