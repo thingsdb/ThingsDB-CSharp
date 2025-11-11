@@ -198,6 +198,28 @@ namespace ThingsDB
             result.RaiseOnErr();
         }
 
+        internal async Task EmitPeers<T>(Room room, string eventName, T[]? args)
+        {
+            int n = args?.Length ?? 0;
+            object[] emit = new object[3 + n];
+            emit[0] = room.Scope();
+            emit[1] = room.Id();
+            emit[2] = eventName;
+            for (var i = 0; i < n; i++)
+            {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8601 // Possible null reference assignment.
+                emit[3 + i] = args[i];
+#pragma warning restore CS8601 // Possible null reference assignment.
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            }
+
+            byte[] data = MessagePackSerializer.Serialize(emit);
+            Package pkg = new(PackageType.ReqEmitPeers, GetNextPid(), data);
+            Package result = await EnsureWrite(pkg, DefaultTimeout);
+            result.RaiseOnErr();
+        }
+
         internal void SetRoom(Room room)
         {
             roomLookup[room.Id()] = room;

@@ -32,6 +32,7 @@
     * [Join](#join)
     * [NoJoin](#nojoin)
     * [Emit](#emit)
+    * [EmitPeers](#emitpeers)
     * [Leave](#leave)
   * [Unpack](#unpack)
     * [Deserialize](#deserialize)
@@ -397,6 +398,10 @@ Emit an event to the room.
 ```csharp
 await myRoom.Emit("new-message", "This is a test message!");
 ```
+
+### EmitPeers
+
+Equal to [Emit](#emit) but to peers only _(no echo back)_.
 
 ### Leave
 ```csharp

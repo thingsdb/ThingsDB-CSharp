@@ -17,12 +17,13 @@
         ResError = 19,  // {error_msg: ..., error_code: x}
 
         ReqPing = 32,   // Empty
-        ReqAuth = 33,   // [user, pass] or token            
+        ReqAuth = 33,   // [user, pass] or token
         ReqQuery = 34,  // [scope, code, {variable}]
 
         ReqRun = 37,    // [scope, procedure, [[args]/{kw}]
         ReqJoin = 38,   // [scope, ...room ids]
         ReqLeave = 39,  // [scope, ...room ids]
         ReqEmit = 40,   // [scope, room_id, event, ...args]
+        ReqEmitPeers = 41,   // [scope, room_id, event, ...args]
     }
 }

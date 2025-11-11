@@ -4,6 +4,7 @@ Before using this script, perform the following steps:
   * Update version in ThingsDB.csproj
   * Run (From the ThingsDB folder): dotnet pack
   * Run this script: python build.py <VERSION>
+    Example python build.py 1.0.3
 """
 import sys
 import os

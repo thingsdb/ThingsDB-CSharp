@@ -124,6 +124,14 @@ namespace ThingsDB
         {
             await Conn.Emit(this, eventName, args);
         }
+        public async Task EmitPeers(string eventName)
+        {
+            await EmitPeers<string>(eventName, null);
+        }
+        public async Task EmitPeers<T>(string eventName, params T[]? args)
+        {
+            await Conn.EmitPeers(this, eventName, args);
+        }
         internal void OnEvent(RoomEvent ev)
         {
             switch (ev.Tp)
