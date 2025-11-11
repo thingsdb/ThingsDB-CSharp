@@ -29,7 +29,7 @@ namespace ThingsDB
         private TaskCompletionSource<int>? joinPromise;
 
         [MessagePackObject]
-        private struct TestRoomId
+        public struct TestRoomId
         {
             [Key("room_id")]
             public ulong RoomId;

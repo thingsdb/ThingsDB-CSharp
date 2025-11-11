@@ -4,9 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Company>Cesbit</Company>
-    <Product>ThingsDB Connector</Product>
+    <Product>ThingsDB.Connector</Product>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageReleaseNotes>Fixed NuGet Package.</PackageReleaseNotes>
@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MessagePack" Version="2.5.108" />
+    <PackageReference Include="MessagePack" Version="3.1.4" />
     <None Include="../README.md" Pack="true" PackagePath="/" />
     <None Include="../LICENSE.txt" Pack="true" PackagePath="/" />
   </ItemGroup>

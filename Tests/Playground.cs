@@ -66,9 +66,9 @@ namespace Tests
             var data = await conn.Query(@"
                 1 + 2;
             ");
-            Assert.IsNotNull(data);
+            Assert.That(data, Is.Not.Null);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
-            Assert.AreEqual(intResult, 3);
+            Assert.That(intResult, Is.EqualTo(3));
 
             var args = new TestAB
             {
@@ -79,15 +79,15 @@ namespace Tests
                 a + b;
             ", args);
             intResult = MessagePackSerializer.Deserialize<int>(data);
-            Assert.AreEqual(intResult, 7);
+            Assert.That(intResult, Is.EqualTo(7));
 
             var args2 = new Dictionary<string, int> { { "a", 6 }, { "b", 7 } };
             data = await conn.Query("a * b;", args2);
             intResult = Unpack.Deserialize<int>(data);  // Same as MessagePackSerializer.Deserialize
-            Assert.AreEqual(intResult, 42);
+            Assert.That(intResult, Is.EqualTo(42));
 
             data = await conn.Query("nil;");
-            Assert.IsTrue(Unpack.IsNil(data));
+            Assert.That(Unpack.IsNil(data), Is.True);
 
             Assert.Pass("Query success");
         }
@@ -107,8 +107,8 @@ namespace Tests
                 expectedException = ex;
             }
 
-            Assert.AreEqual("division or modulo by zero", expectedException.Msg);
-            Assert.AreEqual(-58, expectedException.Code);
+            Assert.That(expectedException.Msg, Is.EqualTo("division or modulo by zero"));
+            Assert.That(expectedException.Code, Is.EqualTo(-58));
 
             Assert.Pass("Query with error success");
         }
@@ -124,12 +124,12 @@ namespace Tests
             };
             var data = await conn.Run("multiply", kwargs);
             var intResult = MessagePackSerializer.Deserialize<int>(data);
-            Assert.AreEqual(intResult, 42);
+            Assert.That(intResult, Is.EqualTo(42));
 
             int[] args = [4, 5];
             data = await conn.Run("multiply", args);
             intResult = MessagePackSerializer.Deserialize<int>(data);
-            Assert.AreEqual(intResult, 20);
+            Assert.That(intResult, Is.EqualTo(20));
 
             Assert.Pass("Run success");
         }
@@ -140,15 +140,15 @@ namespace Tests
             var myRoom = new MyRoom(conn);
             await conn.Connect(token);
 
-            Assert.IsNull(myRoom.Msg);
+            Assert.That(myRoom.Msg, Is.Null);
             await myRoom.Join();
-            Assert.AreEqual("Used for Connector testing", myRoom.Msg);
+            Assert.That(myRoom.Msg, Is.EqualTo("Used for Connector testing"));
 
             await myRoom.Emit("set-message", "test message");
 
             // wait for one second so we have enough time to receive the emit
             await Task.Delay(1000);
-            Assert.AreEqual("test message", myRoom.Msg);
+            Assert.That(myRoom.Msg, Is.EqualTo("test message"));
 
             Assert.Pass("Room success");
         }
